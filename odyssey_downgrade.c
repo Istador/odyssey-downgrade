@@ -91,7 +91,7 @@ static void utilsWaitForButtonPress(u64 flag)
     /* Don't consider stick movement as button inputs. */
     if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
                         HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-    
+
     while(appletMainLoop())
     {
         utilsScanPads();
@@ -115,9 +115,9 @@ static const char exefs_path[] = "sdmc:/atmosphere/contents/0100000000010000/exe
 static const char patch_path[] = "sdmc:/atmosphere/exefs_patches/odyssey_100_downgrade/3CA12DFAAF9C82DA064D1698DF79CDA1.ips";
 
 static const u8 patch_data[] = {
-	0x49, 0x50, 0x53, 0x33, 0x32, 0x00, 0x53, 0x70, 0x44, 0x00, 0x04, 0x00,
-	0x60, 0xB8, 0x52, 0x00, 0x53, 0x70, 0x68, 0x00, 0x04, 0x06, 0x00, 0x00,
-	0x14, 0x45, 0x45, 0x4F, 0x46
+  0x49, 0x50, 0x53, 0x33, 0x32, 0x00, 0x53, 0x70, 0x44, 0x00, 0x04, 0x00,
+  0x60, 0xB8, 0x52, 0x00, 0x53, 0x70, 0x68, 0x00, 0x04, 0x06, 0x00, 0x00,
+  0x14, 0x45, 0x45, 0x4F, 0x46
 };
 
 static const size_t patch_data_size = sizeof(patch_data);
@@ -130,7 +130,7 @@ static void read_thread_func(void *arg)
         shared_data->read_error = true;
         goto end;
     }
-    
+
     u8 *buf = malloc(BLOCK_SIZE);
     if (!buf)
     {
@@ -146,9 +146,9 @@ static void read_thread_func(void *arg)
         condvarWakeAll(&g_writeCondvar);
         goto cleanup;
     }
-    
+
     for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_data->total_size; offset += blksize)
-    {        
+    {
         if ((shared_data->total_size - offset) < blksize) blksize = (shared_data->total_size - offset);
 
         /* Check if the transfer has been cancelled by the user. */
@@ -157,7 +157,7 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Read current file data chunk. */
         shared_data->read_error = !ncaReadFsSection(shared_data->section_ctx, buf, blksize, offset + shared_data->total_offset);
         if (shared_data->read_error)
@@ -165,37 +165,37 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Wait until the previous file data chunk has been written. */
         mutexLock(&g_fileMutex);
-        
+
         if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
-        
+
         if (shared_data->write_error)
         {
             mutexUnlock(&g_fileMutex);
             break;
         }
-        
+
         /* Copy current file data chunk to the shared buffer. */
         memcpy(shared_data->data, buf, blksize);
         shared_data->data_size = blksize;
-        
+
         /* Wake up the write thread to continue writing data. */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_writeCondvar);
     }
-    
+
     /* Wait until the previous file data chunk has been written. */
     mutexLock(&g_fileMutex);
     if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
     mutexUnlock(&g_fileMutex);
-    
+
     if ((shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) && *path) remove(path);
-    
+
 cleanup:
     free(buf);
-    
+
 end:
     threadExit();
 }
@@ -208,20 +208,20 @@ static void write_thread_func(void *arg)
         shared_data->write_error = true;
         goto end;
     }
-    
+
     while(shared_data->data_written < shared_data->total_size)
     {
         /* Wait until the current file data chunk has been read */
         mutexLock(&g_fileMutex);
-        
+
         if (!shared_data->data_size && !shared_data->read_error) condvarWait(&g_writeCondvar, &g_fileMutex);
-        
+
         if (shared_data->read_error || shared_data->transfer_cancelled || !shared_data->fd)
         {
             mutexUnlock(&g_fileMutex);
             break;
         }
-        
+
         /* Write current file data chunk */
         shared_data->write_error = (fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fd) != shared_data->data_size);
         if (!shared_data->write_error)
@@ -229,14 +229,14 @@ static void write_thread_func(void *arg)
             shared_data->data_written += shared_data->data_size;
             shared_data->data_size = 0;
         }
-        
+
         /* Wake up the read thread to continue reading data */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_readCondvar);
-        
+
         if (shared_data->write_error) break;
     }
-    
+
 end:
     threadExit();
 }
@@ -255,43 +255,43 @@ void do_add_downgrade() {
     u32 app_count = 0;
     TitleApplicationMetadata **app_metadata = NULL;
     TitleUserApplicationData user_app_data = {0};
-        
+
     u8 *buf = NULL;
-    
+
     NcaContext *base_nca_ctx = NULL;
-        
+
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
-    
+
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
     if (!app_metadata || !app_count)
     {
         consolePrint("app metadata failed\n");
         goto cleanup;
     }
-    
+
     consolePrint("app metadata succeeded\n");
-    
+
     buf = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     if (!buf)
     {
         consolePrint("buf failed\n");
         goto cleanup;
     }
-    
+
     consolePrint("buf succeeded\n");
-    
+
     base_nca_ctx = calloc(1, sizeof(NcaContext));
     if (!base_nca_ctx)
     {
         consolePrint("base nca ctx buf failed\n");
         goto cleanup;
     }
-    
+
     consolePrint("base nca ctx buf succeeded\n");
-    
+
     utilsSleep(1);
-    
+
     int odysseyIdx = -1;
     for(int i = 0; i < app_count; i++) {
         TitleApplicationMetadata* meta = app_metadata[i];
@@ -311,20 +311,20 @@ void do_add_downgrade() {
         consolePrint("Odyssey seems to not be fully installed, missing your gamecard?\n");
         goto cleanup;
     }
-    
+
     u32 program_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Program);
     if (!program_count)
     {
         consolePrint("base app has no program ncas!\n");
         goto cleanup;
     }
-    
+
     u8 program_id_offset = get_program_id_offset(user_app_data.app_info, program_count);
     if (program_id_offset >= program_count)
     {
         goto cleanup;
     }
-    
+
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[odysseyIdx]->lang_entry.name, app_metadata[odysseyIdx]->title_id + program_id_offset);
 
     if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
@@ -332,8 +332,8 @@ void do_add_downgrade() {
     {
         consolePrint("nca initialize base ctx failed\n");
         goto cleanup;
-    }        
-    
+    }
+
     RomFileSystemContext romfs_ctx = {0};
     if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1])))
     {
@@ -349,7 +349,7 @@ void do_add_downgrade() {
         goto cleanup;
     }
     consolePrint("exefs initialize ctx succeeded\n");
-    
+
     shared_data.section_ctx = &(base_nca_ctx->fs_ctx[1]);
     shared_data.total_offset = romfs_ctx.offset;
     shared_data.total_size = romfs_ctx.size;
@@ -358,7 +358,7 @@ void do_add_downgrade() {
     shared_data.data = buf;
     shared_data.data_size = 0;
     shared_data.data_written = 0;
-    
+
     consolePrint("creating file...");
 
     if(!utilsCreateConcatenationFileWithSize(romfs_path, romfs_ctx.size))
@@ -373,33 +373,33 @@ dump_start:
     consolePrint("creating threads\n");
     utilsCreateThread(&read_thread, read_thread_func, &shared_data, 2);
     utilsCreateThread(&write_thread, write_thread_func, &shared_data, 2);
-    
+
     u8 prev_time = 0;
     u64 prev_size = 0;
     u8 percent = 0;
-    
+
     time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
-    
+
     utilsSetLongRunningProcessState(true);
-    
+
     consolePrint("hold b to cancel\n\n");
-    
+
     time_t start = time(NULL);
-    
+
     while(shared_data.data_written < shared_data.total_size)
     {
         if (shared_data.read_error || shared_data.write_error) break;
-        
+
         struct tm ts = {0};
         time_t now = time(NULL);
         localtime_r(&now, &ts);
-        
+
         size_t size = shared_data.data_written;
-        
+
         utilsScanPads();
         btn_cancel_cur_state = (utilsGetButtonsHeld() & HidNpadButton_B);
-        
+
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
             btn_cancel_start_tmr = now;
@@ -417,36 +417,36 @@ dump_start:
         } else {
             btn_cancel_start_tmr = btn_cancel_end_tmr = 0;
         }
-        
+
         btn_cancel_prev_state = btn_cancel_cur_state;
-        
+
         if (prev_time == ts.tm_sec || prev_size == size) continue;
-        
+
         percent = (u8)((size * 100) / shared_data.total_size);
-        
+
         prev_time = ts.tm_sec;
         prev_size = size;
-        
+
         printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
         consoleUpdate(NULL);
     }
-    
+
     start = (time(NULL) - start);
-    
+
     consolePrint("\nwaiting for threads to join\n");
     utilsJoinThread(&read_thread);
     consolePrint("read_thread done: %lu\n", time(NULL));
     utilsJoinThread(&write_thread);
     consolePrint("write_thread done: %lu\n", time(NULL));
-    
+
     utilsSetLongRunningProcessState(false);
-    
+
     if (shared_data.read_error || shared_data.write_error)
     {
         consolePrint("i/o error\n");
         goto cleanup;
     }
-    
+
     fclose(shared_data.fd);
 
     if (shared_data.transfer_cancelled)
@@ -454,10 +454,10 @@ dump_start:
         consolePrint("process cancelled\n");
         goto cleanup;
     }
-    
+
     consolePrint("process completed in %lu seconds\n", start);
 
-    if(shared_data.mode == false) {    
+    if(shared_data.mode == false) {
         shared_data.section_ctx = &(base_nca_ctx->fs_ctx[0]);
         shared_data.total_offset = exefs_ctx.offset;
         shared_data.total_size = exefs_ctx.size;
@@ -468,17 +468,17 @@ dump_start:
         shared_data.data_written = 0;
         goto dump_start;
     }
-    
+
     if(user_app_data.app_info->storage_id == NcmStorageId_GameCard)
         consolePrint("if odysey doesn't launch, reinsert your gamecard.\n");
 
 cleanup:
     if (base_nca_ctx) free(base_nca_ctx);
-    
+
     titleFreeUserApplicationData(&user_app_data);
-    
+
     if (buf) free(buf);
-    
+
     if (app_metadata) free(app_metadata);
 
     consolePrint("press any button to exit\n");
@@ -575,19 +575,19 @@ static status_t get_status() {
 int main(int argc, char *argv[])
 {
     int ret = 0;
-    
+
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
         ret = -1;
         goto out;
     }
-    
+
     /* Configure input. */
     /* Up to 8 different, full controller inputs. */
     /* Individual Joy-Cons not supported. */
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
-    
+
     consoleInit(NULL);
 
     utilsCreateDirectoryTree(romfs_path, false);
@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
         }
 
         consoleUpdate(NULL);
-        
+
         u64 btn_down = 0, btn_held = 0;
         while((applet_status = appletMainLoop()))
         {
@@ -648,7 +648,7 @@ int main(int argc, char *argv[])
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
         }
-                
+
         if (btn_down & HidNpadButton_A)
         {
             menu_funcs[selected_idx]();
@@ -659,7 +659,7 @@ int main(int argc, char *argv[])
         if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             selected_idx++;
-            
+
             if (selected_idx >= MENU_COUNT)
             {
                 if (btn_down & HidNpadButton_Down)
@@ -673,7 +673,7 @@ int main(int argc, char *argv[])
         if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             selected_idx--;
-            
+
             if (selected_idx == UINT32_MAX)
             {
                 if (btn_down & HidNpadButton_Up)
@@ -688,14 +688,14 @@ int main(int argc, char *argv[])
         {
             break;
         }
-        
+
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
-    
+
 out:
     utilsCloseResources();
-    
+
     consoleExit(NULL);
-    
+
     return ret;
 }
