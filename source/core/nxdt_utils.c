@@ -725,11 +725,11 @@ bool utilsCreateConcatenationFile(const char *path)
     return R_SUCCEEDED(rc);
 }
 
-bool utilsCreateConcatenationFileWithSize(const char *path, u64 size)
+bool utilsCreateConcatenationFileWithSize(const char *path, size_t size)
 {
     if (!path || !*path)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -739,7 +739,7 @@ bool utilsCreateConcatenationFileWithSize(const char *path, u64 size)
     /* Create ConcatenationFile. */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
     Result rc = fsdevCreateFile(path, size, FsCreateOption_BigFile);
-    if (R_FAILED(rc)) LOG_MSG("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
+    if (R_FAILED(rc)) LOG_MSG_ERROR("fsdevCreateFile failed for \"%s\"! (0x%X).", path, rc);
 
     return R_SUCCEEDED(rc);
 }

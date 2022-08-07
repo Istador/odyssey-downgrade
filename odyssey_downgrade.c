@@ -25,6 +25,7 @@
 #include "usb.h"
 #include "title.h"
 #include "pfs.h"
+#include "romfs.h"
 
 #define RESET   "\033[0m"
 #define BLACK   "\033[30m"      /* Black */
@@ -327,15 +328,21 @@ void do_add_downgrade() {
 
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[odysseyIdx]->lang_entry.name, app_metadata[odysseyIdx]->title_id + program_id_offset);
 
-    if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset), NULL))
+    if (!ncaInitializeContext(
+      base_nca_ctx,
+      user_app_data.app_info->storage_id,
+      (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0),
+      titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset),
+      user_app_data.app_info->version.value,
+      NULL
+    ))
     {
         consolePrint("nca initialize base ctx failed\n");
         goto cleanup;
     }
 
     RomFileSystemContext romfs_ctx = {0};
-    if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1])))
+    if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1]), NULL))
     {
         consolePrint("romfs initialize ctx failed\n");
         goto cleanup;
