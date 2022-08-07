@@ -1,5 +1,5 @@
 .vscode
-build
+/build/
 host/__pycache__
 host/build
 host/dist
