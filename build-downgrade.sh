@@ -25,11 +25,8 @@ f="./$filename.c"
 rm -f ./source/main.c
 cp $f ./source/main.c
 
-cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$filename.jpg
-
 make BUILD_TYPE="$filename" -j$(nproc)
 
-rm -f ./romfs/icon/$filename.jpg
 cp ./$filename.nro ./out/$filename.nro
 cp ./$filename.elf ./out/$filename.elf
 
