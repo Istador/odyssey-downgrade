@@ -74,6 +74,9 @@ void utilsCloseResources(void);
 /// Returns a pointer to the application launch path.
 const char *utilsGetLaunchPath(void);
 
+/// Returns the nxlink socket descriptor, or -1 if an nxlink connection couldn't be established.
+int utilsGetNxLinkFileDescriptor(void);
+
 /// Returns a pointer to the FsFileSystem object for the SD card.
 FsFileSystem *utilsGetSdCardFileSystemObject(void);
 
@@ -93,11 +96,9 @@ bool utilsAppletModeCheck(void);
 /// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 
-/// Enables/disables CPU/MEM overclocking.
-void utilsOverclockSystem(bool overclock);
-
-/// (Un)blocks HOME button presses and (un)sets screen dimming and auto sleep.
+/// Blocks HOME button presses, disables screen dimming and auto sleep and overclocks system CPU/MEM.
 /// Must be called before starting long-running processes.
+/// If state is set to false, regular system behavior is restored.
 void utilsSetLongRunningProcessState(bool state);
 
 /// Thread management functions.
@@ -109,7 +110,7 @@ void utilsJoinThread(Thread *thread);
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
 /// Replaces illegal FAT characters in the provided UTF-8 string with underscores.
-/// If 'ascii_only' is set to true, all codepoints outside the (0x20,0x7E] range will also be replaced with underscores.
+/// If 'ascii_only' is set to true, all codepoints outside the [0x20,0x7F) range will also be replaced with underscores.
 /// Replacements are performed on a per-codepoint basis, which means the string length can be reduced by this function.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 

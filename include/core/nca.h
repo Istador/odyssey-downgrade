@@ -37,7 +37,11 @@ extern "C" {
 #define NCA_NCA2_MAGIC                              0x4E434132                  /* "NCA2". */
 #define NCA_NCA3_MAGIC                              0x4E434133                  /* "NCA3". */
 
-#define NCA_USED_KEY_AREA_SIZE                      sizeof(NcaDecryptedKeyArea) /* Four keys, 0x40 bytes. */
+#define NCA_KEY_AREA_KEY_COUNT                      0x10
+#define NCA_KEY_AREA_SIZE                           (NCA_KEY_AREA_KEY_COUNT * AES_128_KEY_SIZE)
+
+#define NCA_KEY_AREA_USED_KEY_COUNT                 3
+#define NCA_KEY_AREA_USED_SIZE                      (NCA_KEY_AREA_USED_KEY_COUNT * AES_128_KEY_SIZE)
 
 #define NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT    5
 
@@ -85,7 +89,7 @@ typedef enum {
     NcaKeyGeneration_Since910NUP  = 11,                             ///< 9.1.0 - 12.0.3.
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
-    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.0.
+    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
     NcaKeyGeneration_Current      = NcaKeyGeneration_Since1400NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
@@ -100,7 +104,7 @@ typedef enum {
 /// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.0.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.2.
     NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
     NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
 } NcaSignatureKeyGeneration;
@@ -121,18 +125,22 @@ typedef struct {
 NXDT_ASSERT(NcaFsHeaderHash, 0x20);
 
 /// Encrypted NCA key area used to hold NCA FS section encryption keys. Zeroed out if the NCA uses titlekey crypto.
-/// Only the first 4 key entries are encrypted.
 /// If a particular key entry is unused, it is zeroed out before this area is encrypted.
 typedef struct {
-    u8 aes_xts_1[AES_128_KEY_SIZE];     ///< AES-128-XTS key 0 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
-    u8 aes_xts_2[AES_128_KEY_SIZE];     ///< AES-128-XTS key 1 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
-    u8 aes_ctr[AES_128_KEY_SIZE];       ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtr crypto.
-    u8 aes_ctr_ex[AES_128_KEY_SIZE];    ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtrEx crypto.
-    u8 aes_ctr_hw[AES_128_KEY_SIZE];    ///< Unused AES-128-CTR key.
-    u8 reserved[0xB0];
+    union {
+        u8 keys[NCA_KEY_AREA_KEY_COUNT][AES_128_KEY_SIZE];
+        struct {
+            u8 aes_xts_1[AES_128_KEY_SIZE];                 ///< AES-128-XTS key 0 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
+            u8 aes_xts_2[AES_128_KEY_SIZE];                 ///< AES-128-XTS key 1 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
+            u8 aes_ctr[AES_128_KEY_SIZE];                   ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtr* and NcaEncryptionType_AesCtrEx* crypto.
+            u8 aes_ctr_ex[AES_128_KEY_SIZE];                ///< Unused AES-128-CTR key.
+            u8 aes_ctr_hw[AES_128_KEY_SIZE];                ///< Unused AES-128-CTR key.
+            u8 reserved[0xB0];
+        };
+    };
 } NcaEncryptedKeyArea;
 
-NXDT_ASSERT(NcaEncryptedKeyArea, 0x100);
+NXDT_ASSERT(NcaEncryptedKeyArea, NCA_KEY_AREA_SIZE);
 
 /// First 0x400 bytes from every NCA.
 typedef struct {
@@ -164,19 +172,30 @@ typedef enum {
 } NcaFsType;
 
 typedef enum {
-    NcaHashType_Auto                  = 0,
-    NcaHashType_None                  = 1,
-    NcaHashType_HierarchicalSha256    = 2,  ///< Used by NcaFsType_PartitionFs.
-    NcaHashType_HierarchicalIntegrity = 3   ///< Used by NcaFsType_RomFs.
+    NcaHashType_Auto                      = 0,
+    NcaHashType_None                      = 1,
+    NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
+    NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
+    NcaHashType_AutoSha3                  = 4,
+    NcaHashType_HierarchicalSha3256       = 5,  ///< Used by NcaFsType_PartitionFs.
+    NcaHashType_HierarchicalIntegritySha3 = 6   ///< Used by NcaFsType_RomFs.
 } NcaHashType;
 
 typedef enum {
-    NcaEncryptionType_Auto     = 0,
-    NcaEncryptionType_None     = 1,
-    NcaEncryptionType_AesXts   = 2,
-    NcaEncryptionType_AesCtr   = 3,
-    NcaEncryptionType_AesCtrEx = 4
+    NcaEncryptionType_Auto                  = 0,
+    NcaEncryptionType_None                  = 1,
+    NcaEncryptionType_AesXts                = 2,
+    NcaEncryptionType_AesCtr                = 3,
+    NcaEncryptionType_AesCtrEx              = 4,
+    NcaEncryptionType_AesCtrSkipLayerHash   = 5,
+    NcaEncryptionType_AesCtrExSkipLayerHash = 6
 } NcaEncryptionType;
+
+typedef enum {
+    NcaMetaDataHashType_None                      = 0,
+    NcaMetaDataHashType_HierarchicalIntegrity     = 1,
+    NcaMetaDataHashType_HierarchicalIntegritySha3 = 2
+} NcaMetaDataHashType;
 
 typedef struct {
     u64 offset;
@@ -234,12 +253,12 @@ NXDT_ASSERT(NcaIntegrityMetaInfo, 0xE0);
 typedef struct {
     union {
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs).
+            ///< Used for NcaHashType_HierarchicalSha256 and NcaHashType_HierarchicalSha3256 (NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs).
             NcaHierarchicalSha256Data hierarchical_sha256_data;
             u8 reserved_1[0x80];
         };
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalIntegrity (NcaFsType_RomFs).
+            ///< Used if NcaHashType_HierarchicalIntegrity and NcaHashType_HierarchicalIntegritySha3 (NcaFsType_RomFs).
             NcaIntegrityMetaInfo integrity_meta_info;
             u8 reserved_2[0x18];
         };
@@ -265,7 +284,7 @@ typedef struct {
 
 NXDT_ASSERT(NcaBucketInfo, 0x20);
 
-/// Only used for NcaEncryptionType_AesCtrEx (PatchRomFs).
+/// Only used for NcaEncryptionType_AesCtrEx and NcaEncryptionType_AesCtrExSkipLayerHash (PatchRomFs).
 typedef struct {
     NcaBucketInfo indirect_bucket;
     NcaBucketInfo aes_ctr_ex_bucket;
@@ -298,61 +317,86 @@ NXDT_ASSERT(NcaSparseInfo, 0x30);
 /// Used in NCAs with LZ4-compressed sections.
 typedef struct {
     NcaBucketInfo bucket;
+    u8 reserved[0x8];
 } NcaCompressionInfo;
 
-NXDT_ASSERT(NcaCompressionInfo, 0x20);
+NXDT_ASSERT(NcaCompressionInfo, 0x28);
+
+typedef struct {
+    u64 offset;
+    u64 size;
+    u8 hash[SHA256_HASH_SIZE];
+} NcaMetaDataHashDataInfo;
+
+NXDT_ASSERT(NcaMetaDataHashDataInfo, 0x30);
 
 /// Four NCA FS headers are placed right after the 0x400 byte long NCA header in NCA2 and NCA3.
 /// NCA0 place the FS headers at the start sector from the NcaFsInfo entries.
 typedef struct {
     u16 version;
-    u8 fs_type;                             ///< NcaFsType.
-    u8 hash_type;                           ///< NcaHashType.
-    u8 encryption_type;                     ///< NcaEncryptionType.
-    u8 reserved_1[0x3];
+    u8 fs_type;                                 ///< NcaFsType.
+    u8 hash_type;                               ///< NcaHashType.
+    u8 encryption_type;                         ///< NcaEncryptionType.
+    u8 metadata_hash_type;                      ///< NcaMetaDataHashType.
+    u8 reserved_1[0x2];
     NcaHashData hash_data;
     NcaPatchInfo patch_info;
     NcaAesCtrUpperIv aes_ctr_upper_iv;
     NcaSparseInfo sparse_info;
     NcaCompressionInfo compression_info;
-    u8 reserved_2[0x68];
+    NcaMetaDataHashDataInfo metadata_hash_info;
+    u8 reserved_2[0x30];
 } NcaFsHeader;
 
 NXDT_ASSERT(NcaFsHeader, 0x200);
 
 typedef enum {
-    NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
-    NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity.
-    NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity + NcaEncryptionType_AesCtrEx.
-    NcaFsSectionType_Nca0RomFs   = 3,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaVersion_Nca0.
+    NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256 OR NcaHashType_HierarchicalSha3256 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
+    NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
+    NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtrEx OR NcaEncryptionType_AesCtrExSkipLayerHash.
+    NcaFsSectionType_Nca0RomFs   = 3,   ///< NcaVersion_Nca0 + NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaEncryptionType_AesXts.
     NcaFsSectionType_Invalid     = 4
 } NcaFsSectionType;
 
 /// Unlike NCA contexts, we don't need to keep a hash for the NCA FS section header in NCA FS section contexts.
 /// This is because the functions that modify the NCA FS section header also update the NCA FS section header hash stored in the NCA header.
 typedef struct {
-    bool enabled;
+    bool enabled;                       ///< Set to true if this NCA FS section has passed all validation checks and can be safely used.
     void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
-    bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
-    u8 section_num;
-    u64 section_offset;
-    u64 section_size;
-    u8 section_type;                    ///< NcaFsSectionType.
+    u8 section_idx;                     ///< Index within [0 - 3].
+    u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
+    u64 section_size;                   ///< Placed here for convenience.
+    u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
-    u8 ctr[AES_BLOCK_SIZE];             ///< Used to update the AES CTR context IV based on the desired offset.
-    Aes128CtrContext ctr_ctx;
-    Aes128XtsContext xts_decrypt_ctx;
-    Aes128XtsContext xts_encrypt_ctx;
-    
+    u8 section_type;                    ///< NcaFsSectionType.
+
+    ///< PatchInfo-related fields.
+    bool has_patch_indirect_layer;      ///< Set to true if this NCA FS section has an Indirect patch layer.
+    bool has_patch_aes_ctr_ex_layer;    ///< Set to true if this NCA FS section has an AesCtrEx patch layer.
+
     ///< SparseInfo-related fields.
-    bool has_sparse_layer;
-    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Placed here for convenience.
-    u64 sparse_table_size;              ///< header.sparse_info.bucket.size. Placed here for convenience.
-    u8 sparse_ctr[AES_BLOCK_SIZE];
-    Aes128CtrContext sparse_ctr_ctx;
+    bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
+    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
+    u64 cur_sparse_virtual_offset;      ///< Current sparse layer virtual offset. Used for content decryption if a sparse layer is available.
+
+    ///< CompressionInfo-related fields.
+    bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
+
+    ///< Hash-layer-related fields.
+    bool skip_hash_layer_crypto;        ///< Set to true if hash layer crypto should be skipped while reading section data.
+    NcaRegion hash_region;              ///< Holds the properties for the full hash layer region that precedes the actual FS section data.
+
+    ///< Crypto-related fields.
+    u8 ctr[AES_BLOCK_SIZE];             ///< Used internally by NCA functions to update the AES-128-CTR context IV based on the desired offset.
+    Aes128CtrContext ctr_ctx;           ///< Used internally by NCA functions to perform AES-128-CTR crypto.
+    Aes128XtsContext xts_decrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS decryption.
+    Aes128XtsContext xts_encrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS encryption.
+
+    ///< NSP-related fields.
+    bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
 } NcaFsSectionContext;
 
 typedef enum {
@@ -362,13 +406,17 @@ typedef enum {
 } NcaVersion;
 
 typedef struct {
-    u8 aes_xts_1[AES_128_KEY_SIZE];     ///< AES-128-XTS key 0 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
-    u8 aes_xts_2[AES_128_KEY_SIZE];     ///< AES-128-XTS key 1 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
-    u8 aes_ctr[AES_128_KEY_SIZE];       ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtr crypto.
-    u8 aes_ctr_ex[AES_128_KEY_SIZE];    ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtrEx crypto.
+    union {
+        u8 keys[NCA_KEY_AREA_USED_KEY_COUNT][AES_128_KEY_SIZE];
+        struct {
+            u8 aes_xts_1[AES_128_KEY_SIZE];                     ///< AES-128-XTS key 0 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
+            u8 aes_xts_2[AES_128_KEY_SIZE];                     ///< AES-128-XTS key 1 used for NCA FS sections with NcaEncryptionType_AesXts crypto.
+            u8 aes_ctr[AES_128_KEY_SIZE];                       ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtr and NcaEncryptionType_AesCtrSkipLayerHash crypto.
+        };
+    };
 } NcaDecryptedKeyArea;
 
-NXDT_ASSERT(NcaDecryptedKeyArea, 0x40);
+NXDT_ASSERT(NcaDecryptedKeyArea, NCA_KEY_AREA_USED_SIZE);
 
 typedef struct {
     u8 storage_id;                                      ///< NcmStorageId.
@@ -383,6 +431,7 @@ typedef struct {
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
+    u32 title_version;
     bool rights_id_available;
     bool titlekey_retrieved;
     bool valid_main_signature;
@@ -393,7 +442,7 @@ typedef struct {
                                                         ///< Otherwise, this holds the unmodified, encrypted NCA header.
     NcaDecryptedKeyArea decrypted_key_area;
     NcaFsSectionContext fs_ctx[NCA_FS_HEADER_COUNT];
-    
+
     ///< NSP-related fields.
     bool header_written;                                ///< Set to true after the NCA header and the FS section headers have been written to an output dump.
     void *content_type_ctx;                             ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
@@ -432,28 +481,25 @@ void ncaFreeCryptoBuffer(void);
 /// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or be used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
+/// Retrieves the FS section's hierarchical hash target layer extents.
+/// Output offset is relative to the start of the FS section.
+/// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
+bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
+
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
-/// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
+/// If dealing with Patch RomFS sections, this function should only be used when *not* reading AesCtrEx storage data. Use ncaReadAesCtrExStorage() for that.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Reads decrypted BKTR AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
+/// Reads plaintext AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
 /// Input offset must be relative to the start of the NCA FS section.
-bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
-
-/// Returns a pointer to a dynamically allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
-/// Input offset must be relative to the start of the NCA FS section.
-/// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
-/// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to seamlessly replace data while dumping a NCA.
-/// This function doesn't support Patch RomFS sections, nor sections with Sparse and/or Compressed storage.
-/// Used internally by both ncaGenerateHierarchicalSha256Patch() and ncaGenerateHierarchicalIntegrityPatch().
-void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
+bool ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalSha256 hash region (actual underlying FS).
@@ -511,55 +557,32 @@ NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
     return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
 }
 
-NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256Data *hierarchical_sha256_data, u64 section_size)
+NX_INLINE bool ncaVerifyBucketInfo(NcaBucketInfo *bucket)
 {
-    if (!hierarchical_sha256_data || !section_size || !hierarchical_sha256_data->hash_block_size || !hierarchical_sha256_data->hash_region_count || \
-        hierarchical_sha256_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT) return false;
-    
-    for(u32 i = 0; i < hierarchical_sha256_data->hash_region_count; i++)
-    {
-        NcaRegion *hash_region = &(hierarchical_sha256_data->hash_region[i]);
-        if (!hash_region->size || (hash_region->offset + hash_region->size) > section_size) return false;
-    }
-    
-    return true;
-}
-
-NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaIntegrityMetaInfo *integrity_meta_info, u64 section_size)
-{
-    if (!integrity_meta_info || !section_size || __builtin_bswap32(integrity_meta_info->magic) != NCA_IVFC_MAGIC || integrity_meta_info->master_hash_size != SHA256_HASH_SIZE || \
-        integrity_meta_info->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT) return false;
-    
-    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
-    {
-        NcaHierarchicalIntegrityVerificationLevelInformation *level_information = &(integrity_meta_info->info_level_hash.level_information[i]);
-        if (!level_information->size || !level_information->block_order || (level_information->offset + level_information->size) > section_size) return false;
-    }
-    
-    return true;
+    return (bucket && __builtin_bswap32(bucket->header.magic) == NCA_BKTR_MAGIC && bucket->header.version <= NCA_BKTR_VERSION && bucket->header.entry_count >= 0);
 }
 
 NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
 {
     if (!patch) return;
-    
+
     for(u32 i = 0; i < NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT; i++)
     {
         if (patch->hash_region_patch[i].data) free(patch->hash_region_patch[i].data);
     }
-    
+
     memset(patch, 0, sizeof(NcaHierarchicalSha256Patch));
 }
 
 NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *patch)
 {
     if (!patch) return;
-    
+
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
     {
         if (patch->hash_level_patch[i].data) free(patch->hash_level_patch[i].data);
     }
-    
+
     memset(patch, 0, sizeof(NcaHierarchicalIntegrityPatch));
 }
 

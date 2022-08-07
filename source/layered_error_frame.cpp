@@ -28,22 +28,22 @@ namespace nxdt::views
         /* Error frame. */
         this->error_frame = new ErrorFrame(msg);
         this->addLayer(this->error_frame);
-        
+
         /* List. */
         this->list = new brls::List();
         this->addLayer(this->list);
     }
-    
+
     void LayeredErrorFrame::SetParentSidebarItem(brls::SidebarItem *sidebar_item)
     {
         if (sidebar_item) this->sidebar_item = sidebar_item;
     }
-    
+
     bool LayeredErrorFrame::IsListItemFocused(void)
     {
         brls::View *cur_view = brls::Application::getCurrentFocus();
         size_t cur_list_count = this->list->getViewsCount();
-        
+
         if (cur_list_count)
         {
             while(cur_view)
@@ -52,19 +52,19 @@ namespace nxdt::views
                 cur_view = cur_view->getParent();
             }
         }
-        
+
         return false;
     }
-    
+
     int LayeredErrorFrame::GetFocusStackViewIndex(void)
     {
         size_t cur_list_count = this->list->getViewsCount();
         std::vector<brls::View*> *focus_stack = brls::Application::getFocusStack();
-        
+
         if (cur_list_count && focus_stack)
         {
             size_t focus_stack_size = focus_stack->size();
-            
+
             for(size_t i = 0; i < focus_stack_size; i++)
             {
                 for(size_t j = 0; j < cur_list_count; j++)
@@ -73,49 +73,65 @@ namespace nxdt::views
                 }
             }
         }
-        
+
         return -1;
     }
-    
+
     bool LayeredErrorFrame::UpdateFocusStackViewAtIndex(int index, brls::View *view)
     {
         std::vector<brls::View*> *focus_stack = brls::Application::getFocusStack();
-        if (!focus_stack || index < 0) return false;
-        
+        if (!focus_stack || index < 0 || !view) return false;
+
         size_t focus_stack_size = focus_stack->size();
         if (index >= static_cast<int>(focus_stack_size)) return false;
-        
+
         focus_stack->at(index) = view;
-        brls::Logger::debug("Focus stack updated");
-        
+        LOG_MSG_DEBUG("Focus stack updated.");
+
         return true;
     }
-    
+
+    brls::View *LayeredErrorFrame::GetListFirstFocusableChild(void)
+    {
+        size_t cur_list_count = this->list->getViewsCount();
+        if (!cur_list_count) return nullptr;
+
+        for(size_t i = 0; i < cur_list_count; i++)
+        {
+            brls::View *cur_child = this->list->getChild(i);
+            if (cur_child && !cur_child->isHidden() && cur_child->getDefaultFocus() != nullptr) return cur_child;
+        }
+
+        return nullptr;
+    }
+
     void LayeredErrorFrame::SwitchLayerView(bool use_error_frame, bool update_focused_view, bool update_focus_stack)
     {
         int cur_index = this->getLayerIndex();
         int new_index = (use_error_frame ? 0 : 1);
-        
+
         size_t cur_list_count = this->list->getViewsCount();
         brls::View *first_child = nullptr;
-        
+
         int focus_stack_index = this->GetFocusStackViewIndex();
         bool focus_stack_updated = false;
-        
+
         if (cur_list_count)
         {
-            /* Get pointer to the first list item. */
-            first_child = this->list->getChild(0);
-            
+            /* Get pointer to the first focusable/unhidden list item. */
+            /* Fallback to the sidebar item if there's none. */
+            first_child = this->GetListFirstFocusableChild();
+            if (!first_child) first_child = this->sidebar_item;
+
             /* Update focus stack information, if needed. */
             if (update_focus_stack && focus_stack_index > -1) focus_stack_updated = this->UpdateFocusStackViewAtIndex(focus_stack_index, use_error_frame ? this->sidebar_item : first_child);
         }
-        
+
         if (!focus_stack_updated)
         {
             /* Check if the user is currently focusing a list item. */
             if (!update_focused_view) update_focused_view = this->IsListItemFocused();
-            
+
             if (update_focused_view)
             {
                 /* Update focused view. */
@@ -126,13 +142,13 @@ namespace nxdt::views
                 } else {
                     /* Move focus to the first list item. */
                     brls::Application::giveFocus(first_child);
-                    
+
                     /* Make sure to call willAppear() on our list to update the scrolling accordingly. */
                     this->list->willAppear(true);
                 }
             }
         }
-        
+
         /* Change layer view only if the new index is different. */
         if (cur_index != new_index)
         {

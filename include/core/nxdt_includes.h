@@ -37,6 +37,7 @@
 #include <math.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <assert.h>
 #include <unistd.h>
 
@@ -50,10 +51,13 @@
 /* libnx header. */
 #include <switch.h>
 
+/* Internet operations. */
+#include <arpa/inet.h>
+
 /* Global defines. */
 #include "../defines.h"
 
-/* File-based logger. */
+/* File/socket based logger. */
 #include "nxdt_log.h"
 
 /* Configuration handler. */
@@ -64,6 +68,13 @@
 
 /* USB Mass Storage support. */
 #include "ums.h"
+
+/* SHA3 checksum calculator. */
+#include "sha3.h"
+
+/* LZ4 (dec)compression. */
+#define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
+#include "lz4.h"
 
 /// Used to store version numbers expressed in dot notation:
 ///     * System version: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".

@@ -68,7 +68,7 @@ typedef struct {
 
 typedef enum {
     TitleNamingConvention_Full             = 0, ///< Individual titles: "{Name} [{Id}][v{Version}][{Type}]".
-                                                ///< Gamecards: "[{Name1}] [{Id1}][v{Version1}] + ... + [{NameN}] [{IdN}][v{VersionN}]".
+                                                ///< Gamecards: "{Name1} [{Id1}][v{Version1}] + ... + {NameN} [{IdN}][v{VersionN}]".
     TitleNamingConvention_IdAndVersionOnly = 1, ///< Individual titles: "{Id}_v{Version}_{Type}".
                                                 ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
     TitleNamingConvention_Count            = 2
@@ -97,6 +97,10 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 /// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_BuiltInUser, NcmStorageId_SdCard, NcmStorageId_GameCard) will be returned.
 /// The allocated buffer must be freed by the calling function using free().
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
+
+/// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries with matching gamecard user titles, as well as their count. Returns NULL if an error occurs.
+/// The allocated buffer must be freed by the calling function using free().
+TitleApplicationMetadata **titleGetGameCardApplicationMetadataEntries(u32 *out_count);
 
 /// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.
@@ -136,6 +140,9 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
 char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type);
+
+/// Returns a pointer to a string holding a user-friendly name for the provided NcmStorageId value. Returns NULL if the provided value is invalid.
+const char *titleGetNcmStorageIdName(u8 storage_id);
 
 /// Returns a pointer to a string holding the name of the provided NcmContentType value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmContentTypeName(u8 content_type);
@@ -229,51 +236,51 @@ NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_i
 NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return 0;
-    
+
     u32 cnt = 0;
-    
+
     for(u32 i = 0; i < info->content_count; i++)
     {
         if (info->content_infos[i].content_type == content_type) cnt++;
     }
-    
+
     return cnt;
 }
 
 NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, u8 content_type, u8 id_offset)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return NULL;
-    
+
     for(u32 i = 0; i < info->content_count; i++)
     {
         NcmContentInfo *cur_content_info = &(info->content_infos[i]);
         if (cur_content_info->content_type == content_type && cur_content_info->id_offset == id_offset) return cur_content_info;
     }
-    
+
     return NULL;
 }
 
 NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
 {
     if (!title_info) return 0;
-    
+
     u32 count = 1;
     TitleInfo *cur_info = title_info->previous;
-    
+
     while(cur_info)
     {
         count++;
         cur_info = cur_info->previous;
     }
-    
+
     cur_info = title_info->next;
-    
+
     while(cur_info)
     {
         count++;
         cur_info = cur_info->next;
     }
-    
+
     return count;
 }
 

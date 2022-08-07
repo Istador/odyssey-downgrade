@@ -24,16 +24,18 @@
 #ifndef __ROMFS_H__
 #define __ROMFS_H__
 
-#include "nca.h"
+#include "nca_storage.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define ROMFS_OLD_HEADER_SIZE   0x28
-#define ROMFS_HEADER_SIZE       0x50
+#define ROMFS_OLD_HEADER_SIZE       0x28
+#define ROMFS_HEADER_SIZE           0x50
 
-#define ROMFS_VOID_ENTRY        0xFFFFFFFF
+#define ROMFS_VOID_ENTRY            UINT32_MAX
+
+#define ROMFS_TABLE_ENTRY_ALIGNMENT 0x4
 
 /// Header used by NCA0 RomFS sections.
 typedef struct {
@@ -80,43 +82,46 @@ typedef struct {
 
 NXDT_ASSERT(RomFileSystemHeader, ROMFS_HEADER_SIZE);
 
-/// Directory entry. Always aligned to a 4-byte boundary past the directory name.
+/// Directory entry. Always aligned to a ROMFS_TABLE_ENTRY_ALIGNMENT boundary past the directory name.
 typedef struct {
     u32 parent_offset;      ///< Parent directory offset.
-    u32 next_offset;        ///< Next sibling directory offset.
-    u32 directory_offset;   ///< First child directory offset.
-    u32 file_offset;        ///< First child file offset.
+    u32 next_offset;        ///< Next sibling directory offset. May be set to ROMFS_VOID_ENTRY if there are no other directory entries at this level.
+    u32 directory_offset;   ///< First child directory offset. May be set to ROMFS_VOID_ENTRY if there are no child directories entries.
+    u32 file_offset;        ///< First child file offset. May be set to ROMFS_VOID_ENTRY if there are no child file entries.
     u32 bucket_offset;      ///< Directory bucket offset.
     u32 name_length;        ///< Name length.
-    char name[];            ///< Name (UTF-8).
+    char name[];            ///< Name (UTF-8, may not be NULL terminated depending on the whole entry alignment).
 } RomFileSystemDirectoryEntry;
 
 NXDT_ASSERT(RomFileSystemDirectoryEntry, 0x18);
 
-/// Directory entry. Always aligned to a 4-byte boundary past the file name.
+/// Directory entry. Always aligned to a ROMFS_TABLE_ENTRY_ALIGNMENT boundary past the file name.
 typedef struct {
     u32 parent_offset;      ///< Parent directory offset.
-    u32 next_offset;        ///< Next sibling file offset.
+    u32 next_offset;        ///< Next sibling file offset. May be set to ROMFS_VOID_ENTRY if there are no other file entries at this level.
     u64 offset;             ///< File data offset.
     u64 size;               ///< File data size.
     u32 bucket_offset;      ///< File bucket offset.
     u32 name_length;        ///< Name length.
-    char name[];            ///< Name (UTF-8).
+    char name[];            ///< Name (UTF-8, may not be NULL terminated depending on the whole entry alignment).
 } RomFileSystemFileEntry;
 
 NXDT_ASSERT(RomFileSystemFileEntry, 0x20);
 
 typedef struct {
-    NcaFsSectionContext *nca_fs_ctx;                ///< Used to read NCA FS section data.
-    u64 offset;                                     ///< RomFS offset (relative to the start of the NCA FS section).
-    u64 size;                                       ///< RomFS size.
-    RomFileSystemHeader header;                     ///< RomFS header.
-    u64 dir_table_size;                             ///< RomFS directory entries table size.
-    RomFileSystemDirectoryEntry *dir_table;         ///< RomFS directory entries table.
-    u64 file_table_size;                            ///< RomFS file entries table size.
-    RomFileSystemFileEntry *file_table;             ///< RomFS file entries table.
-    u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the RomFS).
-    u32 cur_dir_offset;                             ///< Current RomFS directory offset (relative to the start of the directory entries table). Used for RomFS browsing.
+    bool is_patch;                          ///< Set to true if this we're dealing with a Patch RomFS.
+    NcaStorageContext storage_ctx[2];       ///< Used to read NCA FS section data. Index 0: base storage. Index 1: patch storage.
+    NcaStorageContext *default_storage_ctx; ///< Default NCA storage context. Points to one of the two contexts from 'storage_ctx'. Placed here for convenience.
+    u64 offset;                             ///< RomFS offset (relative to the start of the NCA FS section).
+    u64 size;                               ///< RomFS size.
+    RomFileSystemHeader header;             ///< RomFS header.
+    u64 dir_table_size;                     ///< RomFS directory entries table size.
+    RomFileSystemDirectoryEntry *dir_table; ///< RomFS directory entries table.
+    u64 file_table_size;                    ///< RomFS file entries table size.
+    RomFileSystemFileEntry *file_table;     ///< RomFS file entries table.
+    u64 body_offset;                        ///< RomFS file data body offset (relative to the start of the RomFS).
+    u64 cur_dir_offset;                     ///< Current RomFS directory offset (relative to the start of the directory entries table). Used for RomFS browsing.
+    u64 cur_file_offset;                    ///< Current RomFS file offset (relative to the start of the file entries table). Used for RomFS browsing.
 } RomFileSystemContext;
 
 typedef struct {
@@ -132,8 +137,10 @@ typedef enum {
     RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2
 } RomFileSystemPathIllegalCharReplaceType;
 
-/// Initializes a RomFS context.
-bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
+/// Initializes a RomFS or Patch RomFS context.
+/// 'base_nca_fs_ctx' must always be provided.
+/// 'patch_nca_fs_ctx' shall be NULL if not dealing with a Patch RomFS.
+bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *patch_nca_fs_ctx);
 
 /// Reads raw filesystem data using a RomFS context.
 /// Input offset must be relative to the start of the RomFS.
@@ -144,7 +151,8 @@ bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
 /// Calculates the extracted RomFS size.
-bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size);
+/// If 'only_updated' is set to true and the provided RomFS context was initialized as a Patch RomFS context, only files modified by the update will be considered.
+bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *out_size);
 
 /// Calculates the extracted size from a RomFS directory.
 bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size);
@@ -163,45 +171,124 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
 /// Generates a path string from a RomFS file entry.
 bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
 
+/// Checks if a RomFS file entry is updated by the Patch RomFS.
+/// Only works if the provided RomFileSystemContext was initialized as a Patch RomFS context.
+bool romfsIsFileEntryUpdated(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, bool *out);
+
 /// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the RomFS file entry data.
 /// This function shares the same limitations as ncaGenerateHierarchicalSha256Patch() / ncaGenerateHierarchicalIntegrityPatch().
 /// Use the romfsWriteFileEntryPatchToMemoryBuffer() wrapper to write patch data generated by this function.
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out);
 
-/// Miscellaneous functions.
-
+/// Resets a previously initialized RomFileSystemContext.
 NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 {
     if (!ctx) return;
+    ncaStorageFreeContext(&(ctx->storage_ctx[0]));
+    ncaStorageFreeContext(&(ctx->storage_ctx[1]));
     if (ctx->dir_table) free(ctx->dir_table);
     if (ctx->file_table) free(ctx->file_table);
     memset(ctx, 0, sizeof(RomFileSystemContext));
 }
 
-NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByOffset(RomFileSystemContext *ctx, u32 dir_entry_offset)
+/// Functions to reset the current directory/file entry offset.
+NX_INLINE void romfsResetDirectoryTableOffset(RomFileSystemContext *ctx)
 {
-    if (!ctx || !ctx->dir_table || (dir_entry_offset + sizeof(RomFileSystemDirectoryEntry)) > ctx->dir_table_size) return NULL;
-    return (RomFileSystemDirectoryEntry*)((u8*)ctx->dir_table + dir_entry_offset);
+    if (ctx) ctx->cur_dir_offset = 0;
 }
 
-NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext *ctx, u32 file_entry_offset)
+NX_INLINE void romfsResetFileTableOffset(RomFileSystemContext *ctx)
 {
-    if (!ctx || !ctx->file_table || (file_entry_offset + sizeof(RomFileSystemFileEntry)) > ctx->file_table_size) return NULL;
-    return (RomFileSystemFileEntry*)((u8*)ctx->file_table + file_entry_offset);
+    if (ctx) ctx->cur_file_offset = 0;
 }
 
+/// Checks if the provided RomFileSystemContext is valid.
+NX_INLINE bool romfsIsValidContext(RomFileSystemContext *ctx)
+{
+    return (ctx && ncaStorageIsValidContext(ctx->default_storage_ctx) && ctx->size && ctx->dir_table_size && ctx->dir_table && ctx->file_table_size && ctx->file_table && \
+            ctx->body_offset >= ctx->header.old_format.header_size && ctx->body_offset < ctx->size);
+}
+
+/// Functions to retrieve a directory/file entry.
+NX_INLINE void *romfsGetEntryByOffset(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 entry_offset)
+{
+    if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || !entry_size || (entry_offset + entry_size) > entry_table_size) return NULL;
+    return ((u8*)entry_table + entry_offset);
+}
+
+NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByOffset(RomFileSystemContext *ctx, u64 dir_entry_offset)
+{
+    return (ctx ? (RomFileSystemDirectoryEntry*)romfsGetEntryByOffset(ctx, ctx->dir_table, ctx->dir_table_size, sizeof(RomFileSystemDirectoryEntry), dir_entry_offset) : NULL);
+}
+
+NX_INLINE RomFileSystemDirectoryEntry *romfsGetCurrentDirectoryEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsGetDirectoryEntryByOffset(ctx, ctx->cur_dir_offset) : NULL);
+}
+
+NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext *ctx, u64 file_entry_offset)
+{
+    return (ctx ? (RomFileSystemFileEntry*)romfsGetEntryByOffset(ctx, ctx->file_table, ctx->file_table_size, sizeof(RomFileSystemFileEntry), file_entry_offset) : NULL);
+}
+
+NX_INLINE RomFileSystemFileEntry *romfsGetCurrentFileEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsGetFileEntryByOffset(ctx, ctx->cur_file_offset) : NULL);
+}
+
+/// Functions to check if it's possible to move to the next directory/file entry based on the current directory/file entry offset.
+NX_INLINE bool romfsCanMoveToNextEntry(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 entry_offset)
+{
+    if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || entry_size < 4 || (entry_offset + entry_size) > entry_table_size) return false;
+    u32 name_length = *((u32*)((u8*)entry_table + entry_offset + entry_size - 4));
+    return ((entry_offset + ALIGN_UP(entry_size + name_length, ROMFS_TABLE_ENTRY_ALIGNMENT)) <= entry_table_size);
+}
+
+NX_INLINE bool romfsCanMoveToNextDirectoryEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsCanMoveToNextEntry(ctx, ctx->dir_table, ctx->dir_table_size, sizeof(RomFileSystemDirectoryEntry), ctx->cur_dir_offset) : false);
+}
+
+NX_INLINE bool romfsCanMoveToNextFileEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsCanMoveToNextEntry(ctx, ctx->file_table, ctx->file_table_size, sizeof(RomFileSystemFileEntry), ctx->cur_file_offset) : false);
+}
+
+/// Functions to update the current directory/file entry offset to make it point to the next directory/file entry.
+NX_INLINE bool romfsMoveToNextEntry(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 *entry_offset)
+{
+    if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || entry_size < 4 || !entry_offset || (*entry_offset + entry_size) > entry_table_size) return false;
+    u32 name_length = *((u32*)((u8*)entry_table + *entry_offset + entry_size - 4));
+    *entry_offset += ALIGN_UP(entry_size + name_length, ROMFS_TABLE_ENTRY_ALIGNMENT);
+    return true;
+}
+
+NX_INLINE bool romfsMoveToNextDirectoryEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsMoveToNextEntry(ctx, ctx->dir_table, ctx->dir_table_size, sizeof(RomFileSystemDirectoryEntry), &(ctx->cur_dir_offset)) : false);
+}
+
+NX_INLINE bool romfsMoveToNextFileEntry(RomFileSystemContext *ctx)
+{
+    return (ctx ? romfsMoveToNextEntry(ctx, ctx->file_table, ctx->file_table_size, sizeof(RomFileSystemFileEntry), &(ctx->cur_file_offset)) : false);
+}
+
+/// NCA patch management functions.
 NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !patch || (!patch->use_old_format_patch && ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
-        (patch->use_old_format_patch && ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
-    
+    if (!romfsIsValidContext(ctx) || ctx->is_patch || ctx->default_storage_ctx->base_storage_type != NcaStorageBaseStorageType_Regular || !patch || \
+        (!patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || \
+        (patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
+
+    NcaContext *nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
+
     if (patch->use_old_format_patch)
     {
-        ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);
+        ncaWriteHierarchicalSha256PatchToMemoryBuffer(nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);
         patch->written = patch->old_format_patch.written;
     } else {
-        ncaWriteHierarchicalIntegrityPatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->cur_format_patch), buf, buf_size, buf_offset);
+        ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(nca_ctx, &(patch->cur_format_patch), buf, buf_size, buf_offset);
         patch->written = patch->cur_format_patch.written;
     }
 }

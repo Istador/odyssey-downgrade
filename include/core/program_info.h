@@ -34,10 +34,10 @@ extern "C" {
 typedef struct {
     NcaContext *nca_ctx;                ///< Pointer to the NCA context for the Program NCA from which program data (NPDM / NSO) is retrieved.
     PartitionFileSystemContext pfs_ctx; ///< PartitionFileSystemContext for the Program NCA ExeFS, which is where program data (NPDM / NSO) is stored.
-    NpdmContext npdm_ctx;               ///< NpdmContext for the NPDM stored in Program NCA ExeFS. Holds its own NcaHierarchicalSha256Patch that may be applied to the Program NCA if needed.
+    NpdmContext npdm_ctx;               ///< NpdmContext for the NPDM stored in Program NCA ExeFS.
     u32 nso_count;                      ///< Number of NSOs stored in Program NCA FS section #0.
     NsoContext *nso_ctx;                ///< Pointer to a dynamically allocated buffer that holds 'nso_count' NSO contexts.
-    char *authoring_tool_xml;           ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+    char *authoring_tool_xml;           ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
                                         ///< This is always NULL unless programInfoGenerateAuthoringToolXml() is used on this ProgramInfoContext.
     u64 authoring_tool_xml_size;        ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
                                         ///< This is always 0 unless programInfoGenerateAuthoringToolXml() is used on this ProgramInfoContext.
@@ -55,34 +55,23 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx);
 NX_INLINE void programInfoFreeContext(ProgramInfoContext *program_info_ctx)
 {
     if (!program_info_ctx) return;
-    
+
     pfsFreeContext(&(program_info_ctx->pfs_ctx));
     npdmFreeContext(&(program_info_ctx->npdm_ctx));
-    
+
     if (program_info_ctx->nso_ctx)
     {
         for(u32 i = 0; i < program_info_ctx->nso_count; i++) nsoFreeContext(&(program_info_ctx->nso_ctx[i]));
         free(program_info_ctx->nso_ctx);
     }
-    
+
     if (program_info_ctx->authoring_tool_xml) free(program_info_ctx->authoring_tool_xml);
     memset(program_info_ctx, 0, sizeof(ProgramInfoContext));
 }
 
 NX_INLINE bool programInfoIsValidContext(ProgramInfoContext *program_info_ctx)
 {
-    return (program_info_ctx && program_info_ctx->nca_ctx && npdmIsValidContext(&(program_info_ctx->npdm_ctx)) && program_info_ctx->npdm_ctx.pfs_ctx == &(program_info_ctx->pfs_ctx) && \
-            program_info_ctx->nso_count && program_info_ctx->nso_ctx);
-}
-
-NX_INLINE bool programInfoGenerateNcaPatch(ProgramInfoContext *program_info_ctx)
-{
-    return (programInfoIsValidContext(program_info_ctx) && npdmGenerateNcaPatch(&(program_info_ctx->npdm_ctx)));
-}
-
-NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, void *buf, u64 buf_size, u64 buf_offset)
-{
-    if (program_info_ctx) npdmWriteNcaPatch(&(program_info_ctx->npdm_ctx), buf, buf_size, buf_offset);
+    return (program_info_ctx && program_info_ctx->nca_ctx && npdmIsValidContext(&(program_info_ctx->npdm_ctx)) && program_info_ctx->nso_count && program_info_ctx->nso_ctx);
 }
 
 #ifdef __cplusplus

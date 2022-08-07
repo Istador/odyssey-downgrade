@@ -6,6 +6,9 @@ ifeq ($(strip $(DEVKITPRO)),)
 $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
 endif
 
+# Uncomment to enable verbose output.
+#V:=1
+
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
@@ -38,11 +41,13 @@ include $(DEVKITPRO)/libnx/switch_rules
 #   NACP building is skipped as well.
 #---------------------------------------------------------------------------------
 
+ROOTDIR				?=	$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
 GIT_BRANCH			:=	$(shell git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT			:=	$(shell git rev-parse --short HEAD)
 GIT_REV				:=	${GIT_BRANCH}-${GIT_COMMIT}
 
-ifneq (, $(strip $(shell git status --porcelain 2>/dev/null)))
+ifneq (,$(strip $(shell git status --porcelain 2>/dev/null)))
 GIT_REV				:=	$(GIT_REV)-dirty
 endif
 
@@ -70,14 +75,14 @@ ROMFS       		:=	romfs
 BOREALIS_PATH		:=	libs/borealis
 BOREALIS_RESOURCES	:=	romfs:/
 
-USBHSFS_PATH		:=	$(TOPDIR)/libs/libusbhsfs
+USBHSFS_PATH		:=	$(ROOTDIR)/libs/libusbhsfs
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS		:=	-g -gdwarf-4 -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE="\"${APP_TITLE}\"" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
@@ -85,8 +90,8 @@ CFLAGS		+=	-DBUILD_TIMESTAMP="\"${BUILD_TIMESTAMP}\"" -DBOREALIS_RESOURCES="\"${
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 
-ASFLAGS		:=	-g -gdwarf-4 $(ARCH)
-LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g -gdwarf-4 $(ARCH) -Wl,-Map,$(notdir $*.map)
+ASFLAGS		:=	-g $(ARCH)
+LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
 
@@ -96,7 +101,7 @@ LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lusbhsfs 
 #---------------------------------------------------------------------------------
 LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(USBHSFS_PATH)
 
-include $(TOPDIR)/$(BOREALIS_PATH)/library/borealis.mk
+include $(ROOTDIR)/$(BOREALIS_PATH)/library/borealis.mk
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -241,6 +246,18 @@ endif
 $(OUTPUT).elf	:	$(OFILES)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
+
+#---------------------------------------------------------------------------------
+# Overrides for devkitA64/base_rules targets.
+#---------------------------------------------------------------------------------
+
+%.o: %.cpp
+	$(SILENTMSG) $(notdir $<)
+	$(SILENTCMD)$(CXX) -MMD -MP -MF $(DEPSDIR)/$*.d $(CXXFLAGS) -D__FILENAME__="\"$(subst $(ROOTDIR),,$(realpath $<))\"" -c $< -o $@ $(ERROR_FILTER)
+
+%.o: %.c
+	$(SILENTMSG) $(notdir $<)
+	$(SILENTCMD)$(CC) -MMD -MP -MF $(DEPSDIR)/$*.d $(CFLAGS) -D__FILENAME__="\"$(subst $(ROOTDIR),,$(realpath $<))\"" -c $< -o $@ $(ERROR_FILTER)
 
 #---------------------------------------------------------------------------------
 # you need a rule like this for each extension you use as binary data
