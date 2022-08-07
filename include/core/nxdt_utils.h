@@ -140,6 +140,7 @@ void utilsRemoveConcatenationFile(const char *path);
 
 /// Creates a ConcatenationFile at the input path.
 bool utilsCreateConcatenationFile(const char *path);
+bool utilsCreateConcatenationFileWithSize(const char *path, u64 size);
 
 /// Creates a full directory tree using the provided path.
 /// If 'create_last_element' is true, the last element from the provided path will be created as well.

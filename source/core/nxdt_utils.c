@@ -723,6 +723,25 @@ bool utilsCreateConcatenationFile(const char *path)
     return R_SUCCEEDED(rc);
 }
 
+bool utilsCreateConcatenationFileWithSize(const char *path, u64 size)
+{
+    if (!path || !*path)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+
+    /* Safety measure: remove any existant file/directory at the destination path. */
+    utilsRemoveConcatenationFile(path);
+
+    /* Create ConcatenationFile. */
+    /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
+    Result rc = fsdevCreateFile(path, size, FsCreateOption_BigFile);
+    if (R_FAILED(rc)) LOG_MSG("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
+
+    return R_SUCCEEDED(rc);
+}
+
 void utilsCreateDirectoryTree(const char *path, bool create_last_element)
 {
     char *ptr = NULL, *tmp = NULL;
