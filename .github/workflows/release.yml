@@ -12,7 +12,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      filename: ${{ steps.build.outputs.filename }}
+      filename : ${{ steps.build.outputs.filename }}
+      sha1sum  : ${{ steps.build.outputs.sha1sum }}
     steps:
     -
       name : Checkout
@@ -38,7 +39,12 @@ jobs:
       id   : release
       uses : ./.github/actions/release
       with:
-        tag          : ${{ github.ref_name }}
+        tag  : ${{ github.ref_name }}
+        body : |
+          ```
+          $ sha1sum ${{ needs.build.outputs.filename }}.*
+          ${{ needs.build.outputs.sha1sum }}
+          ```
         GITHUB_TOKEN : ${{ secrets.GITHUB_TOKEN }}
     -
       name : Attach build artifacts to release

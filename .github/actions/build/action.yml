@@ -12,6 +12,9 @@ outputs:
   filename:
     description : 'Filename for the build artifacts'
     value       : ${{ steps.env.outputs.filename }}
+  sha1sum:
+    description : 'Hashes of the output files'
+    value       : ${{ steps.build.outputs.sha1sum }}
 
 
 runs:
@@ -43,9 +46,16 @@ runs:
       cache-to   : type=gha,scope=smo-downgrade-build,mode=max
   -
     name  : Build mod
+    id    : build
     shell : bash
     run: |
       ./docker-build.sh  ${{ (steps.env.outputs.version != '' && steps.env.outputs.version) || '' }}
+      cd ./out/
+      hashes=`sha1sum ${{ steps.env.outputs.filename }}.*`
+      hashes="${hashes//'%'/'%25'}"
+      hashes="${hashes//$'\n'/'%0A'}"
+      hashes="${hashes//$'\r'/'%0D'}"
+      echo "::set-output name=sha1sum::$hashes"
   -
     name : Upload artifacts
     uses : actions/upload-artifact@v3
