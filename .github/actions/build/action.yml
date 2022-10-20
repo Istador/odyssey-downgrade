@@ -26,8 +26,8 @@ runs:
     shell : bash
     run: |
       VERS=${{ inputs.tag }}
-      echo "::set-output name=version::${VERS:1}"
-      echo "::set-output name=filename::odyssey_downgrade"
+      echo "version=${VERS:1}" >>$GITHUB_OUTPUT
+      echo "filename=odyssey_downgrade" >>$GITHUB_OUTPUT
   -
     name : Set up Docker Buildx
     uses : docker/setup-buildx-action@v2
@@ -55,7 +55,7 @@ runs:
       hashes="${hashes//'%'/'%25'}"
       hashes="${hashes//$'\n'/'%0A'}"
       hashes="${hashes//$'\r'/'%0D'}"
-      echo "::set-output name=sha1sum::$hashes"
+      echo "sha1sum=$hashes" >>$GITHUB_OUTPUT
   -
     name : Upload artifacts
     uses : actions/upload-artifact@v3
