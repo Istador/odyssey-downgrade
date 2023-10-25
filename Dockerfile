@@ -1,4 +1,4 @@
-FROM  devkitpro/devkita64:latest  as  base
+FROM  devkitpro/devkita64:20220531  as  base
 
 # install dependencies
 RUN   apt-get  update       \
