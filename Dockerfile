@@ -1,4 +1,4 @@
-FROM  devkitpro/devkita64:20230402  as  base
+FROM  devkitpro/devkita64:20230929  as  base
 
 # install dependencies
 RUN   apt-get  update       \
@@ -7,11 +7,11 @@ RUN   apt-get  update       \
     build-essential         \
     fakeroot                \
     file                    \
+    zstd                    \
 ;
 
 # install devkitpro
-RUN   ln  -s  /proc/self/mounts  /etc/mtab  \
-  &&  useradd  nxdt-build  \
+RUN   useradd  nxdt-build  \
   &&  dkp-pacman  --noconfirm  -S  dkp-toolchain-vars  \
 ;
 
@@ -26,9 +26,9 @@ RUN  chown  nxdt-build:  -R  .
 USER  nxdt-build
 
 RUN   cd ./libs/libusbhsfs/liblwext4  \
-  &&  COMMIT=docker  dkp-makepkg  \
+  &&  dkp-makepkg  -c  -C  -f  \
   &&  cd  /app/  \
-  &&  cp  ./libs/libusbhsfs/liblwext4/switch-lwext4*.tar.xz  lwext4.tar.xz  \
+  &&  cp  ./libs/libusbhsfs/liblwext4/switch-lwext4*.tar.zst  lwext4.tar.zst  \
 ;
 
 ################################################################################
@@ -40,20 +40,20 @@ RUN  chown  nxdt-build:  -R  .
 USER  nxdt-build
 
 RUN   cd ./libs/libusbhsfs/libntfs-3g  \
-  &&  COMMIT=docker  dkp-makepkg  \
+  &&  dkp-makepkg  -c  -C  -f  \
   &&  cd  /app/  \
-  &&  cp  ./libs/libusbhsfs/libntfs-3g/switch-libntfs-3g*.tar.xz  ntfs3g.tar.xz  \
+  &&  cp  ./libs/libusbhsfs/libntfs-3g/switch-libntfs-3g*.tar.zst  ntfs3g.tar.zst  \
 ;
 
 ################################################################################
 
 FROM  base  as  builder
 
-COPY  --from=lwext4  /app/lwext4.tar.xz  ./lwext4.tar.xz
-COPY  --from=ntfs3g  /app/ntfs3g.tar.xz  ./ntfs3g.tar.xz
-RUN   dkp-pacman  -U lwext4.tar.xz  --noconfirm  \
-  &&  dkp-pacman  -U ntfs3g.tar.xz  --noconfirm  \
-  &&  rm  -rf  lwext4.tar.xz  ntfs3g.tar.xz  \
+COPY  --from=lwext4  /app/lwext4.tar.zst  ./lwext4.tar.zst
+COPY  --from=ntfs3g  /app/ntfs3g.tar.zst  ./ntfs3g.tar.zst
+RUN   dkp-pacman  -U lwext4.tar.zst  --needed  --noconfirm  \
+  &&  dkp-pacman  -U ntfs3g.tar.zst  --needed  --noconfirm  \
+  &&  rm  -rf  lwext4.tar.zst  ntfs3g.tar.zst  \
 ;
 
 ENTRYPOINT  [ "/app/build-downgrade.sh" ]

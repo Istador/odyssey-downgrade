@@ -331,9 +331,9 @@ void do_add_downgrade() {
     if (!ncaInitializeContext(
       base_nca_ctx,
       user_app_data.app_info->storage_id,
-      (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0),
+      (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0),
+      &(user_app_data.app_info->meta_key),
       titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset),
-      user_app_data.app_info->version.value,
       NULL
     ))
     {
