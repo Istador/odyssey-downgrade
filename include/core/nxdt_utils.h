@@ -1,7 +1,7 @@
 /*
  * nxdt_utils.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -49,7 +49,8 @@ typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
     UtilsCustomFirmwareType_Atmosphere = 1,
     UtilsCustomFirmwareType_SXOS       = 2,
-    UtilsCustomFirmwareType_ReiNX      = 3
+    UtilsCustomFirmwareType_ReiNX      = 3,
+    UtilsCustomFirmwareType_Count      = 4  ///< Total values supported by this enum.
 } UtilsCustomFirmwareType;
 
 /// Used to handle parsed data from a GitHub release JSON.
@@ -87,11 +88,14 @@ bool utilsCommitSdCardFileSystemChanges(void);
 /// Returns a UtilsCustomFirmwareType value.
 u8 utilsGetCustomFirmwareType(void);
 
+/// Returns true if the application is running under a Mariko unit.
+bool utilsIsMarikoUnit(void);
+
 /// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
 /// Returns true if the application is running under applet mode.
-bool utilsAppletModeCheck(void);
+bool utilsIsAppletMode(void);
 
 /// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
@@ -117,9 +121,16 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 /// Trims whitespace characters from the provided string.
 void utilsTrimString(char *str);
 
-/// Generates a hex string representation of the binary data stored in 'src' and stores it in 'dst'.
+/// Generates a NULL-terminated hex string representation of the binary data in 'src' and stores it in 'dst'.
 /// If 'uppercase' is true, uppercase characters will be used to generate the hex string. Otherwise, lowercase characters will be used.
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
+void utilsGenerateHexString(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
+
+/// Parses the hex string in 'src' and stores its binary representation in 'dst'.
+/// 'src' must match the regex /^(?:[A-Fa-f0-9]{2})+$/.
+/// 'src_size' may be zero, in which case strlen() will be used to determine the length of 'src'. Furthermore, 'src_size' must always be a multiple of 2.
+/// 'dst_size' must be at least 'src_size / 2'.
+/// Returns false if there's an error validating input arguments.
+bool utilsParseHexString(void *dst, size_t dst_size, const char *src, size_t src_size);
 
 /// Formats the provided 'size' value to a human-readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size);
@@ -147,12 +158,17 @@ bool utilsCreateConcatenationFileWithSize(const char *path, u64 size);
 /// If 'create_last_element' is true, the last element from the provided path will be created as well.
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
+/// Recursively deletes the directory located at the provided path and all of its contents.
+/// The provided path must be absolute and it must include the virtual device name it belongs to (e.g. "sdmc:/path/to/dir").
+bool utilsDeleteDirectoryRecursively(const char *path);
+
 /// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments. Both path prefix and file extension are optional.
 /// If any elements from the generated path exceed safe filesystem limits, each exceeding element will be truncated. Truncations, if needed, are performed on a per-codepoint basis (UTF-8).
 /// If an extension is provided, it will always be preserved, regardless of any possible truncations being carried out.
 /// A path separator is automatically placed between the provided prefix and the filename if the prefix doesn't end with one.
 /// A dot *isn't* automatically placed between the filename and the provided extension -- if required, it must be provided as part of the extension string.
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
+/// The allocated buffer must be freed by the calling function using free().
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
 /// Prints an error message using the standard console output and waits for the user to press a button.
@@ -184,6 +200,12 @@ NX_INLINE void utilsFreeGitHubReleaseJsonData(UtilsGitHubReleaseJsonData *data)
 NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);
+}
+
+/// Introduces a 33.33 milliseconds delay. Suitable to avoid hitting 100% CPU core usage in appletMainLoop() loops.
+NX_INLINE void utilsAppletLoopDelay(void)
+{
+    svcSleepThread(THIRTY_FPS_DELAY);
 }
 
 /// Wrappers used in scoped locks.

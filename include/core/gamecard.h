@@ -1,7 +1,7 @@
 /*
  * gamecard.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -40,20 +40,6 @@ extern "C" {
 
 #define GAMECARD_CERTIFICATE_OFFSET 0x7000
 
-/// Plaintext area. Dumped from FS program memory.
-/// Overall structure may change with each new LAFW version.
-typedef struct {
-    u32 asic_security_mode;     ///< Determines how the Lotus ASIC initialised the gamecard security mode. Usually 0xFFFFFFF9.
-    u32 asic_status;            ///< Bitmask of the internal gamecard interface status. Usually 0x20000000.
-    FsCardId1 card_id1;
-    FsCardId2 card_id2;
-    u8 card_uid[0x40];
-    u8 reserved[0x190];
-    u8 asic_session_hash[0x20]; ///< Changes with each gamecard (re)insertion.
-} GameCardSpecificData;
-
-NXDT_ASSERT(GameCardSpecificData, 0x200);
-
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
     union {
@@ -77,18 +63,6 @@ typedef struct {
 } GameCardInitialData;
 
 NXDT_ASSERT(GameCardInitialData, 0x200);
-
-/// Plaintext area. Dumped from FS program memory.
-/// This struct is returned by Lotus command "ChangeToSecureMode" (0xF). This means it is only available *after* the gamecard secure area has been mounted.
-/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
-typedef struct {
-    GameCardSpecificData specific_data;
-    FsGameCardCertificate certificate;
-    u8 reserved[0x200];
-    GameCardInitialData initial_data;
-} GameCardSecurityInformation;
-
-NXDT_ASSERT(GameCardSecurityInformation, 0x800);
 
 /// Encrypted using AES-128-CTR with the key and IV/counter from the `GameCardTitleKeyAreaEncryption` section. Assumed to be all zeroes in retail gamecards.
 typedef struct {
@@ -117,9 +91,36 @@ typedef struct {
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
+/// Plaintext area. Dumped from FS program memory.
+/// Overall structure may change with each new LAFW version.
+typedef struct {
+    u32 asic_security_mode;     ///< Determines how the Lotus ASIC initialised the gamecard security mode. Usually 0xFFFFFFF9.
+    u32 asic_status;            ///< Bitmask of the internal gamecard interface status. Usually 0x20000000.
+    FsCardId1 card_id1;
+    FsCardId2 card_id2;
+    u8 card_uid[0x40];
+    u8 reserved[0x190];
+    u8 asic_session_hash[0x20]; ///< Changes with each gamecard (re)insertion.
+} GameCardSpecificData;
+
+NXDT_ASSERT(GameCardSpecificData, 0x200);
+
+/// Plaintext area. Dumped from FS program memory.
+/// This struct is returned by Lotus command "ChangeToSecureMode" (0xF). This means it is only available *after* the gamecard secure area has been mounted.
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
+typedef struct {
+    GameCardSpecificData specific_data;
+    FsGameCardCertificate certificate;
+    u8 reserved[0x200];
+    GameCardInitialData initial_data;
+} GameCardSecurityInformation;
+
+NXDT_ASSERT(GameCardSecurityInformation, 0x800);
+
 typedef enum {
     GameCardKekIndex_Version0      = 0,
-    GameCardKekIndex_VersionForDev = 1
+    GameCardKekIndex_VersionForDev = 1,
+    GameCardKekIndex_Count         = 2  ///< Total values supported by this enum.
 } GameCardKekIndex;
 
 typedef struct {
@@ -139,17 +140,20 @@ typedef enum {
 } GameCardRomSize;
 
 typedef enum {
+    GameCardFlags_None                             = 0,
     GameCardFlags_AutoBoot                         = BIT(0),
     GameCardFlags_HistoryErase                     = BIT(1),
     GameCardFlags_RepairTool                       = BIT(2),
     GameCardFlags_DifferentRegionCupToTerraDevice  = BIT(3),
     GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4),
-    GameCardFlags_HasCa10Certificate               = BIT(7)
+    GameCardFlags_HasCa10Certificate               = BIT(7),
+    GameCardFlags_Count                            = 6          ///< Total values supported by this enum.
 } GameCardFlags;
 
 typedef enum {
     GameCardSelSec_ForT1 = 1,
-    GameCardSelSec_ForT2 = 2
+    GameCardSelSec_ForT2 = 2,
+    GameCardSelSec_Count = 2    ///< Total values supported by this enum.
 } GameCardSelSec;
 
 typedef enum {
@@ -159,7 +163,7 @@ typedef enum {
     GameCardFwVersion_Since900NUP  = 3, ///< upp_version >= 603979776 (9.0.0-0.0) in GameCardInfo. Seems to be unused.
     GameCardFwVersion_Since1100NUP = 4, ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
     GameCardFwVersion_Since1200NUP = 5, ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_Count        = 6
+    GameCardFwVersion_Count        = 6  ///< Total values supported by this enum.
 } GameCardFwVersion;
 
 typedef enum {
@@ -170,26 +174,23 @@ typedef enum {
 typedef enum {
     GameCardCompatibilityType_Normal = 0,
     GameCardCompatibilityType_Terra  = 1,
-    GameCardCompatibilityType_Count  = 2
+    GameCardCompatibilityType_Count  = 2    ///< Total values supported by this enum.
 } GameCardCompatibilityType;
 
 /// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.
-/// Key hashes for documentation purposes:
-/// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
-/// Development XCI header key hash: 61D5C02244188810E2E3DE69341AC0F3C7653D370C6D3F77CA82B0B7E59F39AD
 typedef struct {
-    u64 fw_version;             ///< GameCardFwVersion.
-    u32 acc_ctrl_1;             ///< GameCardAccCtrl1.
-    u32 wait_1_time_read;       ///< Always 0x1388.
-    u32 wait_2_time_read;       ///< Always 0.
-    u32 wait_1_time_write;      ///< Always 0.
-    u32 wait_2_time_write;      ///< Always 0.
-    SdkAddOnVersion fw_mode;    ///< Current SdkAddOnVersion.
-    Version upp_version;        ///< Bundled system update version.
-    u8 compatibility_type;      ///< GameCardCompatibilityType.
+    u64 fw_version;         ///< GameCardFwVersion.
+    u32 acc_ctrl_1;         ///< GameCardAccCtrl1.
+    u32 wait_1_time_read;   ///< Always 0x1388.
+    u32 wait_2_time_read;   ///< Always 0.
+    u32 wait_1_time_write;  ///< Always 0.
+    u32 wait_2_time_write;  ///< Always 0.
+    Version fw_mode;        ///< Current SDK version.
+    Version upp_version;    ///< Bundled system update version.
+    u8 compatibility_type;  ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
-    u64 upp_hash;               ///< SHA-256 (?) checksum for the update partition. The exact way it's calculated is currently unknown.
-    u64 upp_id;                 ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;           ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
 } GameCardInfo;
 
@@ -230,18 +231,9 @@ typedef enum {
     GameCardStatus_LotusAsicFirmwareUpdateRequired = 3, ///< A gamecard has been inserted, but a LAFW update is needed before being able to read the secure storage area.
                                                         ///< Operations on the normal storage area are still possible, though.
     GameCardStatus_InsertedAndInfoNotLoaded        = 4, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
-    GameCardStatus_InsertedAndInfoLoaded           = 5  ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
+    GameCardStatus_InsertedAndInfoLoaded           = 5, ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
+    GameCardStatus_Count                           = 6  ///< Total values supported by this enum.
 } GameCardStatus;
-
-typedef enum {
-    GameCardHashFileSystemPartitionType_None   = 0, ///< Not a real value.
-    GameCardHashFileSystemPartitionType_Root   = 1,
-    GameCardHashFileSystemPartitionType_Update = 2,
-    GameCardHashFileSystemPartitionType_Logo   = 3, ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
-    GameCardHashFileSystemPartitionType_Normal = 4,
-    GameCardHashFileSystemPartitionType_Secure = 5,
-    GameCardHashFileSystemPartitionType_Count  = 6  ///< Total values supported by this enum.
-} GameCardHashFileSystemPartitionType;
 
 typedef enum {
     LotusAsicFirmwareType_ReadFw    = 0xFF,
@@ -255,7 +247,7 @@ typedef enum {
     LotusAsicDeviceType_Dev      = 1,
     LotusAsicDeviceType_Prod     = 2,
     LotusAsicDeviceType_Prod2Dev = 3,
-    LotusAsicDeviceType_Count    = 4    ///< Not a real value.
+    LotusAsicDeviceType_Count    = 4    ///< Total values supported by this enum.
 } LotusAsicDeviceType;
 
 /// Plaintext Lotus ASIC firmware (LAFW) blob. Dumped from FS program memory.
@@ -295,7 +287,7 @@ u8 gamecardGetStatus(void);
 
 /// Fills the provided GameCardSecurityInformation pointer.
 /// This area can't be read using gamecardReadStorage().
-bool gamecardGetSecurityInformation(GameCardSecurityInformation* out);
+bool gamecardGetSecurityInformation(GameCardSecurityInformation *out);
 
 /// Fills the provided FsGameCardIdSet pointer.
 /// This area can't be read using gamecardReadStorage().

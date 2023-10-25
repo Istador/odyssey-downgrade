@@ -1,8 +1,8 @@
 /*
  * sha3.h
  *
- * Copyright (c) Atmosphère-NX
- * Copyright (c) 2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) Atmosphère-NX.
+ * Copyright (c) 2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  * Loosely based on crypto_sha3_impl.hpp from Atmosphere-libs.

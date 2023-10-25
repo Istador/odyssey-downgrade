@@ -1,7 +1,7 @@
 /*
  * services.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -46,7 +46,6 @@ static Result servicesGetExosphereApiVersion(u32 *out);
 
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
-static bool servicesSplCryptoCheckAvailability(void *arg);
 
 /* Global variables. */
 
@@ -55,16 +54,16 @@ static ServiceInfo g_serviceInfo[] = {
     { false, "ns", NULL, &nsInitialize, &nsExit },
     { false, "csrng", NULL, &csrngInitialize, &csrngExit },
     { false, "spl:", NULL, &splInitialize, &splExit },
-    { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice). */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
-    { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
+    { false, "clk", &servicesClkGetServiceType, NULL, NULL },           /* Placeholder for pcv / clkrst. */
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set", NULL, &setInitialize, &setExit },
     { false, "set:sys", NULL, &setsysInitialize, &setsysExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit },
-    { false, "bsd:u", NULL, &socketInitializeDefault, &socketExit }                                     /* socketInitialize*() functions take care of initializing bsd:* too. */
+    { false, "bsd:u", NULL, &socketInitializeDefault, &socketExit },    /* socketInitialize*() functions take care of initializing bsd:* too. */
+    { false, "usb:ds", NULL, &usbDsInitialize, &usbDsExit }
 };
 
 static const u32 g_serviceInfoCount = MAX_ELEMENTS(g_serviceInfo);
@@ -330,15 +329,4 @@ static bool servicesClkGetServiceType(void *arg)
     info->close_func = (g_clkSvcUsePcv ? &pcvExit : &servicesClkrstExit);
 
     return true;
-}
-
-static bool servicesSplCryptoCheckAvailability(void *arg)
-{
-    if (!arg) return false;
-
-    ServiceInfo *info = (ServiceInfo*)arg;
-    if (strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
-
-    /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
-    return hosversionAtLeast(4, 0, 0);
 }

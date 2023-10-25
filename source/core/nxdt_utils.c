@@ -1,7 +1,7 @@
 /*
  * nxdt_utils.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -32,9 +32,11 @@
 #include "nxdt_bfsar.h"
 #include "fatfs/ff.h"
 
-/* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
-/* Actually expressed in bytes, not codepoints. */
-#define NT_MAX_FILENAME_LENGTH  255
+/// Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits.
+/// Reference: https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits.
+/// Most modern filesystems use a 255-byte limit instead of 255-character/codepoint limit, so that's what we're gonna use.
+#define FS_MAX_FILENAME_LENGTH      255
+#define SDMC_MAX_FILENAME_LENGTH    128 /* Arbitrarily set, I'm tired of FS sysmodule shenanigans. */
 
 /* Type definitions. */
 
@@ -57,6 +59,8 @@ static int g_nxLinkSocketFd = -1;
 
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
+static u8 g_productModel = SetSysProductModel_Invalid;
+
 static bool g_isDevUnit = false;
 
 static AppletType g_programAppletType = AppletType_None;
@@ -78,7 +82,6 @@ static const char *g_outputDirs[] = {
     HBMENU_BASE_PATH,
     APP_BASE_PATH,
     GAMECARD_PATH,
-    CERT_PATH,
     HFS_PATH,
     NSP_PATH,
     TICKET_PATH,
@@ -96,9 +99,9 @@ static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
 
 static void _utilsGetCustomFirmwareType(void);
 
-static bool _utilsIsDevelopmentUnit(void);
+static bool _utilsGetProductModel(void);
 
-static bool _utilsAppletModeCheck(void);
+static bool _utilsIsDevelopmentUnit(void);
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
@@ -109,6 +112,8 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 static void utilsChangeHomeButtonBlockStatus(bool block);
 
 static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit);
+
+static char utilsConvertHexDigitToBinary(char c);
 
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
@@ -153,13 +158,16 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG_INFO("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
                                                                                   (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
 
-        /* Check if we're not running under a development unit. */
+        /* Get product model. */
+        if (!_utilsGetProductModel()) break;
+
+        /* Get development unit flag. */
         if (!_utilsIsDevelopmentUnit()) break;
-        LOG_MSG_INFO("Running under %s unit.", g_isDevUnit ? "development" : "retail");
 
         /* Get applet type. */
         g_programAppletType = appletGetAppletType();
-        LOG_MSG_INFO("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
+
+        LOG_MSG_INFO("Running under %s %s unit in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", utilsIsAppletMode() ? "applet" : "title override");
 
         /* Create output directories (SD card only). */
         /* TODO: remove the APP_TITLE check whenever we're ready for a release. */
@@ -182,7 +190,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         }
 
         /* Initialize HTTP interface. */
-        /* CURL must be initialized before starting any other threads. */
+        /* cURL must be initialized before starting any other threads. */
         if (!httpInitialize()) break;
 
         /* Initialize USB interface. */
@@ -235,11 +243,17 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
 
         /* Enable video recording if we're running under title override mode. */
-        if (!_utilsAppletModeCheck())
+        if (!utilsIsAppletMode())
         {
             bool flag = false;
             rc = appletIsGamePlayRecordingSupported(&flag);
-            if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
+            if (R_SUCCEEDED(rc) && flag)
+            {
+                rc = appletInitializeGamePlayRecording();
+                if (R_FAILED(rc)) LOG_MSG_ERROR("appletInitializeGamePlayRecording failed! (0x%X).", rc);
+            } else {
+                LOG_MSG_ERROR("appletIsGamePlayRecordingSupported returned [0x%X, %u].", rc, flag);
+            }
         }
 
         /* Update flags. */
@@ -369,14 +383,19 @@ u8 utilsGetCustomFirmwareType(void)
     return g_customFirmwareType;
 }
 
+bool utilsIsMarikoUnit(void)
+{
+    return (g_productModel > SetSysProductModel_Copper);
+}
+
 bool utilsIsDevelopmentUnit(void)
 {
     return g_isDevUnit;
 }
 
-bool utilsAppletModeCheck(void)
+bool utilsIsAppletMode(void)
 {
-    return _utilsAppletModeCheck();
+    return (g_programAppletType > AppletType_Application && g_programAppletType < AppletType_SystemApplication);
 }
 
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
@@ -485,9 +504,12 @@ void utilsJoinThread(Thread *thread)
 
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !fmt || !*fmt)
+    bool use_log = false;
+    SCOPED_LOCK(&g_resourcesMutex) use_log = g_resourcesInit;
+
+    if (!dst || !dst_size || !fmt || !*fmt)
     {
-        LOG_MSG_ERROR("Invalid parameters!");
+        if (use_log) LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -501,9 +523,10 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     bool success = false;
 
+    /* Sanity check. */
     if (dst_cur_size && dst_str_len >= dst_cur_size)
     {
-        LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
+        if (use_log) LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
         return false;
     }
 
@@ -513,13 +536,13 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
     if (formatted_str_len <= 0)
     {
-        LOG_MSG_ERROR("Failed to retrieve formatted string length!");
+        if (use_log) LOG_MSG_ERROR("Failed to retrieve formatted string length!");
         goto end;
     }
 
     formatted_str_len_cast = (size_t)(formatted_str_len + 1);
 
-    if (!dst_cur_size || formatted_str_len_cast > (dst_cur_size - dst_str_len))
+    if (!dst_ptr || !dst_cur_size || formatted_str_len_cast > (dst_cur_size - dst_str_len))
     {
         /* Update buffer size. */
         dst_cur_size = (dst_str_len + formatted_str_len_cast);
@@ -528,7 +551,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
         tmp_str = realloc(dst_ptr, dst_cur_size);
         if (!tmp_str)
         {
-            LOG_MSG_ERROR("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
+            if (use_log) LOG_MSG_ERROR("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
             goto end;
         }
 
@@ -545,6 +568,8 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     /* Generate formatted string. */
     vsprintf(dst_ptr + dst_str_len, fmt, args);
+
+    /* Update output flag. */
     success = true;
 
 end:
@@ -605,7 +630,7 @@ void utilsTrimString(char *str)
     if (start != str) memmove(str, start, end - start + 1);
 }
 
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase)
+void utilsGenerateHexString(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase)
 {
     if (!src || !src_size || !dst || dst_size < ((src_size * 2) + 1)) return;
 
@@ -624,6 +649,36 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
     dst[j] = '\0';
 }
 
+bool utilsParseHexString(void *dst, size_t dst_size, const char *src, size_t src_size)
+{
+    u8 *dst_u8 = (u8*)dst;
+    bool success = true;
+
+    if (!dst || !dst_size || !src || !*src || (!src_size && !(src_size = strlen(src))) || (src_size % 2) != 0 || dst_size < (src_size / 2))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    memset(dst, 0, dst_size);
+
+    for(size_t i = 0; i < src_size; i++)
+    {
+        char val = utilsConvertHexDigitToBinary(src[i]);
+        if (val == 'z')
+        {
+            LOG_MSG_ERROR("Invalid hex character in string \"%s\" at position %lu!", src, i);
+            success = false;
+            break;
+        }
+
+        if ((i & 1) == 0) val <<= 4;
+        dst_u8[i >> 1] |= val;
+    }
+
+    return success;
+}
+
 void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
 {
     if (!dst || dst_size < 2) return;
@@ -635,7 +690,10 @@ void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
         if (size >= pow(1024.0, i + 1) && (i + 1) < g_sizeSuffixesCount) continue;
 
         size /= pow(1024.0, i);
-        snprintf(dst, dst_size, "%.2F %s", size, g_sizeSuffixes[i]);
+
+        /* Don't display decimal places if we're dealing with plain bytes. */
+        snprintf(dst, dst_size, "%.*f %s", i == 0 ? 0 : 2, size, g_sizeSuffixes[i]);
+
         break;
     }
 }
@@ -767,6 +825,86 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     free(tmp);
 }
 
+bool utilsDeleteDirectoryRecursively(const char *path)
+{
+    char *name_end = NULL, *entry_path = NULL;
+    DIR *dir = NULL;
+    struct dirent *entry = NULL;
+    bool success = true;
+
+    /* Sanity checks. */
+    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !*(name_end + 2))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    if (!(dir = opendir(path)))
+    {
+        LOG_MSG_ERROR("Failed to open directory \"%s\"! (%d).", path, errno);
+        success = false;
+        goto end;
+    }
+
+    if (!(entry_path = calloc(1, FS_MAX_PATH)))
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for path buffer!");
+        success = false;
+        goto end;
+    }
+
+    /* Read directory entries. */
+    while((entry = readdir(dir)))
+    {
+        int status = 0;
+
+        /* Skip current directory and parent directory entries. */
+        if (!strcmp(".", entry->d_name) || !strcmp("..", entry->d_name)) continue;
+
+        /* Generate path to the current entry. */
+        snprintf(entry_path, FS_MAX_PATH, "%s/%s", path, entry->d_name);
+
+        if (entry->d_type == DT_DIR)
+        {
+            /* Delete directory contents. */
+            if (!utilsDeleteDirectoryRecursively(entry_path))
+            {
+                success = false;
+                break;
+            }
+
+            /* Delete directory. */
+            status = rmdir(entry_path);
+        } else {
+            /* Delete file. */
+            status = unlink(entry_path);
+        }
+
+        if (status != 0)
+        {
+            LOG_MSG_ERROR("Failed to delete \"%s\"! (%s, %d).", entry_path, entry->d_type == DT_DIR ? "dir" : "file", errno);
+            success = false;
+            break;
+        }
+    }
+
+    if (success)
+    {
+        closedir(dir);
+        dir = NULL;
+
+        success = (rmdir(path) == 0);
+        if (!success) LOG_MSG_ERROR("Failed to delete topmost directory \"%s\"! (%d).", path, errno);
+    }
+
+end:
+    if (entry_path) free(entry_path);
+
+    if (dir) closedir(dir);
+
+    return success;
+}
+
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)
 {
     if (!filename || !*filename)
@@ -777,13 +915,15 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
 
     bool use_prefix = (prefix && *prefix);
     size_t prefix_len = (use_prefix ? strlen(prefix) : 0);
-    bool append_path_sep = (use_prefix && prefix[prefix_len - 1] != '/');
+    bool append_path_sep = (use_prefix && prefix[prefix_len - 1] != '/' && *filename != '/');
 
     bool use_extension = (extension && *extension);
     size_t extension_len = (use_extension ? strlen(extension) : 0);
 
     size_t path_len = (prefix_len + strlen(filename) + extension_len);
     if (append_path_sep) path_len++;
+
+    const size_t max_filename_len = ((use_prefix && !strncmp(prefix, DEVOPTAB_SDMC_DEVICE, strlen(DEVOPTAB_SDMC_DEVICE))) ? SDMC_MAX_FILENAME_LENGTH : FS_MAX_FILENAME_LENGTH);
 
     char *path = NULL, *ptr1 = NULL, *ptr2 = NULL;
     bool filename_only = false, success = false;
@@ -809,7 +949,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         ptr1 = path;
     }
 
-    /* Make sure each path element doesn't exceed NT_MAX_FILENAME_LENGTH. */
+    /* Make sure each path element doesn't exceed our max filename length. */
     while(ptr1)
     {
         if (!filename_only)
@@ -825,8 +965,8 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
 
         /* Get UTF-8 string limit. */
-        /* Use NT_MAX_FILENAME_LENGTH as the byte count limit. */
-        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, NT_MAX_FILENAME_LENGTH);
+        /* Use our max filename length as the byte count limit. */
+        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, max_filename_len);
         if (last_cp_pos < element_size)
         {
             if (ptr2)
@@ -909,6 +1049,7 @@ void utilsPrintConsoleError(const char *msg)
     {
         padUpdate(&pad);
         if (padGetButtonsDown(&pad) & flag) break;
+        utilsAppletLoopDelay();
     }
 
     /* Deinitialize console output. */
@@ -1053,7 +1194,7 @@ static void _utilsGetLaunchPath(int program_argc, const char **program_argv)
 
     for(int i = 0; i < program_argc; i++)
     {
-        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", 6))
+        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", strlen(DEVOPTAB_SDMC_DEVICE)))
         {
             g_appLaunchPath = program_argv[i];
             break;
@@ -1067,6 +1208,24 @@ static void _utilsGetCustomFirmwareType(void)
     bool rnx_srv = servicesCheckRunningServiceByName("rnx");
 
     g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
+}
+
+static bool _utilsGetProductModel(void)
+{
+    Result rc = 0;
+    bool ret = false;
+    SetSysProductModel model = SetSysProductModel_Invalid;
+
+    rc = setsysGetProductModel(&model);
+    if (R_SUCCEEDED(rc) && model != SetSysProductModel_Invalid)
+    {
+        g_productModel = model;
+        ret = true;
+    } else {
+        LOG_MSG_ERROR("setsysGetProductModel failed! (0x%X) (%d).", rc, model);
+    }
+
+    return ret;
 }
 
 static bool _utilsIsDevelopmentUnit(void)
@@ -1083,11 +1242,6 @@ static bool _utilsIsDevelopmentUnit(void)
     }
 
     return R_SUCCEEDED(rc);
-}
-
-static bool _utilsAppletModeCheck(void)
-{
-    return (g_programAppletType > AppletType_Application && g_programAppletType < AppletType_SystemApplication);
 }
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void)
@@ -1156,7 +1310,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
 static void utilsChangeHomeButtonBlockStatus(bool block)
 {
     /* Only change HOME button blocking status if we're running as a regular application or a system application. */
-    if (_utilsAppletModeCheck()) return;
+    if (utilsIsAppletMode()) return;
 
     if (block)
     {
@@ -1164,13 +1318,6 @@ static void utilsChangeHomeButtonBlockStatus(bool block)
     } else {
         appletEndBlockingHomeButtonShortAndLongPressed();
     }
-}
-
-NX_INLINE void utilsCloseFileDescriptor(int *fd)
-{
-    if (!fd || *fd < 0) return;
-    close(*fd);
-    *fd = -1;
 }
 
 static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit)
@@ -1195,4 +1342,12 @@ static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t b
     }
 
     return last_cp_pos;
+}
+
+static char utilsConvertHexDigitToBinary(char c)
+{
+    if ('a' <= c && c <= 'f') return (c - 'a' + 0xA);
+    if ('A' <= c && c <= 'F') return (c - 'A' + 0xA);
+    if ('0' <= c && c <= '9') return (c - '0');
+    return 'z';
 }

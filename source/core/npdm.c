@@ -1,7 +1,7 @@
 /*
  * npdm.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -30,7 +30,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     bool success = false, dump_meta_header = false, dump_acid_header = false, dump_aci_header = false;
     PartitionFileSystemEntry *pfs_entry = NULL;
 
-    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)pfs_ctx->nca_fs_ctx->nca_ctx) || \
+    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !(nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx) || \
         nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
         pfs_ctx->header_size <= sizeof(PartitionFileSystemHeader) || !pfs_ctx->header)
     {

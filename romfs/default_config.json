@@ -1,13 +1,14 @@
 {
     "overclock": true,
     "naming_convention": 0,
-    "dump_destination": 0,
+    "output_storage": 0,
     "gamecard": {
-        "append_key_area": false,
+        "prepend_key_area": false,
         "keep_certificate": false,
         "trim_dump": false,
         "calculate_checksum": true,
-        "checksum_lookup_method": 1
+        "checksum_lookup_method": 1,
+        "write_raw_hfs_partition": false
     },
     "nsp": {
         "set_download_distribution": false,
@@ -17,13 +18,14 @@
         "enable_screenshots": false,
         "enable_video_capture": false,
         "disable_hdcp": false,
-        "append_authoringtool_data": false,
+        "generate_authoringtool_data": false,
         "lookup_checksum": true
     },
     "ticket": {
         "remove_console_data": true
     },
     "nca_fs": {
+        "write_raw_section": false,
         "use_layeredfs_dir": false
     }
 }

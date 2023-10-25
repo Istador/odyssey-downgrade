@@ -1,7 +1,7 @@
 /*
  * titles_tab.cpp
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -120,7 +120,7 @@ namespace nxdt::views
         if (!app_metadata_count) return;
 
         /* Populate list. */
-        for(TitleApplicationMetadata *cur_app_metadata : *app_metadata)
+        for(const TitleApplicationMetadata *cur_app_metadata : *app_metadata)
         {
             /* Create list item. */
             TitlesTabItem *title = new TitlesTabItem(cur_app_metadata, this->is_system);

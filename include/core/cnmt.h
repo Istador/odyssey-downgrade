@@ -1,7 +1,7 @@
 /*
  * cnmt.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -34,6 +34,7 @@ extern "C" {
 
 /// Equivalent to NcmContentMetaAttribute.
 typedef enum {
+    ContentMetaAttribute_None                = 0,
     ContentMetaAttribute_IncludesExFatDriver = BIT(0),
     ContentMetaAttribute_Rebootless          = BIT(1),
     ContentMetaAttribute_Compacted           = BIT(2),  ///< One or more NCAs use SparseInfo data.
@@ -41,7 +42,14 @@ typedef enum {
 } ContentMetaAttribute;
 
 typedef enum {
-    ContentMetaInstallState_Committed = BIT(0)
+    ContentMetaPlatform_Nx    = 0,
+    ContentMetaPlatform_Count = 1   ///< Total values supported by this enum.
+} ContentMetaPlatform;
+
+typedef enum {
+    ContentMetaInstallState_None      = 0,
+    ContentMetaInstallState_Committed = BIT(0),
+    ContentMetaInstallState_Count     = 1       ///< Total values supported by this enum.
 } ContentMetaInstallState;
 
 /// Extended variation of NcmContentMetaHeader. This is essentially the start of every CNMT file.
@@ -52,17 +60,17 @@ typedef enum {
 typedef struct {
     u64 title_id;
     Version version;
-    u8 content_meta_type;                                   ///< NcmContentMetaType.
-    u8 reserved_1;
-    u16 extended_header_size;                               ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
-    u16 content_count;                                      ///< Determines how many NcmPackagedContentInfo entries are available after the extended header.
-    u16 content_meta_count;                                 ///< Determines how many NcmContentMetaInfo entries are available after the NcmPackagedContentInfo entries. Only used for SystemUpdate.
-    u8 content_meta_attribute;                              ///< ContentMetaAttribute.
-    u8 storage_id;                                          ///< NcmStorageId.
-    u8 content_install_type;                                ///< NcmContentInstallType.
-    u8 install_state;                                       ///< ContentMetaInstallState.
+    u8 content_meta_type;                       ///< NcmContentMetaType.
+    u8 content_meta_platform;                   ///< ContentMetaPlatform.
+    u16 extended_header_size;                   ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
+    u16 content_count;                          ///< Determines how many NcmPackagedContentInfo entries are available after the extended header.
+    u16 content_meta_count;                     ///< Determines how many NcmContentMetaInfo entries are available after the NcmPackagedContentInfo entries. Only used for SystemUpdate.
+    u8 content_meta_attribute;                  ///< ContentMetaAttribute.
+    u8 storage_id;                              ///< NcmStorageId.
+    u8 content_install_type;                    ///< NcmContentInstallType.
+    u8 install_state;                           ///< ContentMetaInstallState.
     Version required_download_system_version;
-    u8 reserved_2[0x4];
+    u8 reserved[0x4];
 } ContentMetaPackagedContentMetaHeader;
 
 NXDT_ASSERT(ContentMetaPackagedContentMetaHeader, 0x20);
@@ -96,15 +104,33 @@ typedef struct {
 
 NXDT_ASSERT(ContentMetaPatchMetaExtendedHeader, 0x18);
 
-/// Extended header for AddOnContent titles.
+typedef enum {
+    ContentMetaContentAccessibility_None       = 0,
+    ContentMetaContentAccessibility_Individual = BIT(0),
+    ContentMetaContentAccessibility_Count      = 1          ///< Total values supported by this enum.
+} ContentMetaContentAccessibility;
+
+/// Extended header for AddOnContent tiles (15.0.0+).
 /// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a Version struct.
 typedef struct {
     u64 application_id;
     Version required_application_version;
-    u8 reserved[0x4];
+    u8 content_accessibility;               ///< ContentMetaContentAccessibility.
+    u8 reserved[0x3];
+    u64 data_patch_id;
 } ContentMetaAddOnContentMetaExtendedHeader;
 
-NXDT_ASSERT(ContentMetaAddOnContentMetaExtendedHeader, 0x10);
+NXDT_ASSERT(ContentMetaAddOnContentMetaExtendedHeader, 0x18);
+
+/// Old extended header for AddOnContent titles (1.0.0 - 14.1.2).
+/// Equivalent to NcmLegacyAddOnContentMetaExtendedHeader, but using a Version struct.
+typedef struct {
+    u64 application_id;
+    Version required_application_version;
+    u8 reserved[0x4];
+} ContentMetaLegacyAddOnContentMetaExtendedHeader;
+
+NXDT_ASSERT(ContentMetaLegacyAddOnContentMetaExtendedHeader, 0x10);
 
 /// Extended header for Delta titles.
 typedef struct {
@@ -115,11 +141,24 @@ typedef struct {
 
 NXDT_ASSERT(ContentMetaDeltaMetaExtendedHeader, 0x10);
 
+/// Extended header for DataPatch titles.
+/// Equivalent to NcmDataPatchMetaExtendedHeader, but using a Version struct.
+typedef struct {
+    u64 data_id;
+    u64 application_id;
+    Version required_application_version;
+    u32 extended_data_size;
+    u8 reserved[0x8];
+} ContentMetaDataPatchMetaExtendedHeader;
+
+NXDT_ASSERT(ContentMetaDataPatchMetaExtendedHeader, 0x20);
+
 typedef enum {
     ContentMetaFirmwareVariationVersion_Invalid = 0,
     ContentMetaFirmwareVariationVersion_V1      = 1,
     ContentMetaFirmwareVariationVersion_V2      = 2,
-    ContentMetaFirmwareVariationVersion_Unknown = 3
+    ContentMetaFirmwareVariationVersion_Unknown = 3,
+    ContentMetaFirmwareVariationVersion_Count   = 4     ///< Total values supported by this enum.
 } ContentMetaFirmwareVariationVersion;
 
 /// Header for the extended data region in the SystemUpdate title, pointed to by the extended header.
@@ -210,7 +249,8 @@ NXDT_ASSERT(ContentMetaPatchDeltaHeader, 0x28);
 typedef enum {
     ContentMetaUpdateType_ApplyAsDelta = 0,
     ContentMetaUpdateType_Overwrite    = 1,
-    ContentMetaUpdateType_Create       = 2
+    ContentMetaUpdateType_Create       = 2,
+    ContentMetaUpdateType_Count        = 3  ///< Total values supported by this enum.
 } ContentMetaUpdateType;
 
 #pragma pack(push, 1)
@@ -219,8 +259,8 @@ typedef struct {
     NcmContentId destination_content_id;
     u32 source_size_low;
     u16 source_size_high;
-    u32 destination_size_low;
     u16 destination_size_high;
+    u32 destination_size_low;
     u16 fragment_count;
     u8 fragment_target_content_type;                ///< NcmContentType.
     u8 update_type;                                 ///< ContentMetaUpdateType.
@@ -314,16 +354,38 @@ NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
 
 NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)
 {
-    return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
-            cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
-            *((u64*)cnmt_ctx->extended_header) : 0);
+    if (!cnmtIsValidContext(cnmt_ctx)) return 0;
+
+    u8 content_meta_type = cnmt_ctx->packaged_header->content_meta_type;
+
+    if (content_meta_type == NcmContentMetaType_Application || content_meta_type == NcmContentMetaType_Patch || content_meta_type == NcmContentMetaType_AddOnContent)
+    {
+        return *((u64*)cnmt_ctx->extended_header);
+    } else
+    if (content_meta_type == NcmContentMetaType_DataPatch)
+    {
+        return ((ContentMetaDataPatchMetaExtendedHeader*)cnmt_ctx->extended_header)->application_id;
+    }
+
+    return 0;
 }
 
 NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
 {
-    return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
-            cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
-            ((Version*)(cnmt_ctx->extended_header + sizeof(u64)))->value : 0);
+    if (!cnmtIsValidContext(cnmt_ctx)) return 0;
+
+    u8 content_meta_type = cnmt_ctx->packaged_header->content_meta_type;
+
+    if (content_meta_type == NcmContentMetaType_Application || content_meta_type == NcmContentMetaType_Patch || content_meta_type == NcmContentMetaType_AddOnContent)
+    {
+        return ((Version*)(cnmt_ctx->extended_header + sizeof(u64)))->value;
+    } else
+    if (content_meta_type == NcmContentMetaType_DataPatch)
+    {
+        return ((ContentMetaDataPatchMetaExtendedHeader*)cnmt_ctx->extended_header)->required_application_version.value;
+    }
+
+    return 0;
 }
 
 #ifdef __cplusplus

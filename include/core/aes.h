@@ -1,7 +1,7 @@
 /*
  * aes.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -27,6 +27,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/// One-shot function to perform AES-128-ECB crypto.
+/// 'dst', 'src' and 'key' must all have a size of at least AES_BLOCK_SIZE bytes.
+/// 'dst' and 'src' can both point to the same address.
+void aes128EcbCrypt(void *dst, const void *src, const void *key, bool encrypt);
 
 /// Performs an AES-128-XTS crypto operation using the non-standard Nintendo XTS tweak.
 /// The Aes128XtsContext element should have been previously initialized with aes128XtsContextCreate(). 'encrypt' should match the value of 'is_encryptor' used with that call.

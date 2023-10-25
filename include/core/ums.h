@@ -1,7 +1,7 @@
 /*
  * ums.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -42,6 +42,10 @@ bool umsIsDeviceInfoUpdated(void);
 /// Returns a pointer to a dynamically allocated array of UsbHsFsDevice elements. The allocated buffer must be freed by the calling function.
 /// Returns NULL if an error occurs.
 UsbHsFsDevice *umsGetDevices(u32 *out_count);
+
+/// Unmounts a USB Mass Storage device using a UsbHsFsDevice element.
+/// If successful, USB Mass Storage device info will be automatically reloaded, and the next call to umsIsDeviceInfoUpdated() shall return true.
+bool umsUnmountDevice(const UsbHsFsDevice *device);
 
 #ifdef __cplusplus
 }

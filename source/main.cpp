@@ -1,7 +1,7 @@
 /*
  * main.cpp
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 
     try {
         /* Check if we're running under applet mode. */
-        if (utilsAppletModeCheck())
+        if (utilsIsAppletMode())
         {
             /* Push crash frame with the applet mode warning. */
             brls::Application::pushView(new brls::CrashFrame("generic/applet_mode_warning"_i18n, [](brls::View *view) {

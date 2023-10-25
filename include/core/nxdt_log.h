@@ -1,7 +1,7 @@
 /*
  * nxdt_log.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -44,9 +44,9 @@ extern "C" {
 
 /// Helper macros.
 
-#define LOG_MSG_GENERIC(level, fmt, ...)                    logWriteFormattedStringToLogFile(level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_MSG_GENERIC(level, fmt, ...)                    logWriteFormattedStringToLogFile(level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
 #define LOG_MSG_DEBUG(fmt, ...)                             LOG_MSG_GENERIC(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)

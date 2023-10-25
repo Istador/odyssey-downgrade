@@ -1,7 +1,7 @@
 /*
  * config.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -31,16 +31,16 @@ extern "C" {
 #endif
 
 typedef enum {
-    ConfigDumpDestination_SdCard  = 0,
-    ConfigDumpDestination_UsbHost = 1,
-    ConfigDumpDestination_Count   = 2
-} ConfigDumpDestination;
+    ConfigOutputStorage_SdCard  = 0,
+    ConfigOutputStorage_UsbHost = 1,
+    ConfigOutputStorage_Count   = 2     ///< Total values supported by this enum.
+} ConfigOutputStorage;
 
 typedef enum {
     ConfigChecksumLookupMethod_None    = 0,
     ConfigChecksumLookupMethod_NSWDB   = 1,
     ConfigChecksumLookupMethod_NoIntro = 2,
-    ConfigChecksumLookupMethod_Count   = 3
+    ConfigChecksumLookupMethod_Count   = 3  ///< Total values supported by this enum.
 } ConfigChecksumLookupMethod;
 
 /// Initializes the configuration interface.

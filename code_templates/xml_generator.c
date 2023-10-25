@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -81,11 +81,11 @@ static void writeFile(void *buf, size_t buf_size, const char *path)
 
 int main(int argc, char *argv[])
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
-        ret = -1;
+        ret = EXIT_FAILURE;
         goto out;
     }
 
@@ -280,8 +280,8 @@ int main(int argc, char *argv[])
         NcmContentInfo *content_info = &(user_app_data.app_info->content_infos[i]);
         if (content_info->content_type == NcmContentType_Meta) continue;
 
-        if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            content_info, user_app_data.app_info->version.value, &tik))
+        if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+                                  &(user_app_data.app_info->meta_key), content_info, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
             goto out2;
@@ -330,14 +330,14 @@ int main(int argc, char *argv[])
         j++;
     }
 
-    if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), user_app_data.app_info->version.value, &tik))
+    if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+                              &(user_app_data.app_info->meta_key), titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), &tik))
     {
-        consolePrint("Meta nca initialize ctx failed\n");
+        consolePrint("meta nca initialize ctx failed\n");
         goto out2;
     }
 
-    consolePrint("Meta nca initialize ctx succeeded\n");
+    consolePrint("meta nca initialize ctx succeeded\n");
 
     if (!cnmtInitializeContext(&cnmt_ctx, &(nca_ctx[meta_idx])))
     {

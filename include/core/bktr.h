@@ -2,7 +2,7 @@
  * bktr.h
  *
  * Copyright (c) 2018-2020, SciresM.
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -70,7 +70,8 @@ NXDT_ASSERT(BucketTreeOffsetNode, BKTR_NODE_SIZE);
 /// IndirectStorage-related elements.
 typedef enum {
     BucketTreeIndirectStorageIndex_Original = 0,
-    BucketTreeIndirectStorageIndex_Patch    = 1
+    BucketTreeIndirectStorageIndex_Patch    = 1,
+    BucketTreeIndirectStorageIndex_Count    = 2     ///< Total values supported by this enum.
 } BucketTreeIndirectStorageIndex;
 
 #pragma pack(push, 1)
@@ -86,7 +87,8 @@ NXDT_ASSERT(BucketTreeIndirectStorageEntry, BKTR_INDIRECT_ENTRY_SIZE);
 /// AesCtrExStorage-related elements.
 typedef enum {
     BucketTreeAesCtrExStorageEncryption_Enabled  = 0,
-    BucketTreeAesCtrExStorageEncryption_Disabled = 1
+    BucketTreeAesCtrExStorageEncryption_Disabled = 1,
+    BucketTreeAesCtrExStorageEncryption_Count    = 2    ///< Total values supported by this enum.
 } BucketTreeAesCtrExStorageEncryption;
 
 typedef struct {
@@ -100,10 +102,11 @@ NXDT_ASSERT(BucketTreeAesCtrExStorageEntry, BKTR_AES_CTR_EX_ENTRY_SIZE);
 
 /// CompressedStorage-related elements.
 typedef enum {
-    BucketTreeCompressedStorageCompressionType_None = 0,
-    BucketTreeCompressedStorageCompressionType_Zero = 1,
-    BucketTreeCompressedStorageCompressionType_2    = 2,
-    BucketTreeCompressedStorageCompressionType_LZ4  = 3
+    BucketTreeCompressedStorageCompressionType_None  = 0,
+    BucketTreeCompressedStorageCompressionType_Zero  = 1,
+    BucketTreeCompressedStorageCompressionType_2     = 2,
+    BucketTreeCompressedStorageCompressionType_LZ4   = 3,
+    BucketTreeCompressedStorageCompressionType_Count = 4    ///< Total values supported by this enum.
 } BucketTreeCompressedStorageCompressionType;
 
 typedef struct {
@@ -161,14 +164,17 @@ typedef enum {
     BucketTreeSubStorageType_Count      = 5     ///< Total values supported by this enum.
 } BucketTreeSubStorageType;
 
+// Forward declaration for BucketTreeSubStorage.
+typedef struct _BucketTreeContext BucketTreeContext;
+
 typedef struct {
     u8 index;                           ///< Substorage index.
     NcaFsSectionContext *nca_fs_ctx;    ///< NCA FS section context. Used to perform operations on the target NCA.
     u8 type;                            ///< BucketTreeSubStorageType.
-    void *bktr_ctx;                     ///< BucketTreeContext related to this storage. Only used if type > BucketTreeSubStorageType_Regular.
+    BucketTreeContext *bktr_ctx;        ///< BucketTreeContext related to this storage. Only used if type > BucketTreeSubStorageType_Regular.
 } BucketTreeSubStorage;
 
-typedef struct {
+struct _BucketTreeContext {
     NcaFsSectionContext *nca_fs_ctx;                                ///< NCA FS section context. Used to perform operations on the target NCA.
     u8 storage_type;                                                ///< BucketTreeStorageType.
     BucketTreeTable *storage_table;                                 ///< Pointer to the dynamically allocated Bucket Tree Table for this storage.
@@ -181,7 +187,7 @@ typedef struct {
     u64 start_offset;                                               ///< Virtual storage start offset.
     u64 end_offset;                                                 ///< Virtual storage end offset.
     BucketTreeSubStorage substorages[BKTR_MAX_SUBSTORAGE_COUNT];    ///< Substorages required for this BucketTree storage. May be set after initializing this context.
-} BucketTreeContext;
+};
 
 /// Initializes a Bucket Tree context using the provided NCA FS section context and a storage type.
 /// 'storage_type' may only be BucketTreeStorageType_Indirect, BucketTreeStorageType_AesCtrEx or BucketTreeStorageType_Sparse.
@@ -231,11 +237,11 @@ NX_INLINE bool bktrIsBlockWithinStorageRange(BucketTreeContext *ctx, u64 size, u
     return (bktrIsValidContext(ctx) && size > 0 && ctx->start_offset <= offset && size <= (ctx->end_offset - offset));
 }
 
-NX_INLINE bool bktrIsValidSubstorage(BucketTreeSubStorage *substorage)
+NX_INLINE bool bktrIsValidSubStorage(BucketTreeSubStorage *substorage)
 {
     return (substorage && substorage->index < BKTR_MAX_SUBSTORAGE_COUNT && substorage->nca_fs_ctx && substorage->type < BucketTreeSubStorageType_Count && \
             ((substorage->type == BucketTreeSubStorageType_Regular && substorage->index == 0 && !substorage->bktr_ctx) || \
-            (substorage->type > BucketTreeSubStorageType_Regular && substorage->bktr_ctx)));
+            (substorage->type > BucketTreeSubStorageType_Regular && substorage->bktr_ctx && substorage->bktr_ctx->nca_fs_ctx == substorage->nca_fs_ctx)));
 }
 
 #ifdef __cplusplus

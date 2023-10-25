@@ -1,7 +1,7 @@
 /*
  * defines.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -29,8 +29,6 @@
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
-
-#define BIT_LONG(n)                     (1UL << (n))
 
 #define ALIGN_UP(x, y)                  (((x) + ((y) - 1)) & ~((y) - 1))
 #define ALIGN_DOWN(x, y)                ((x) & ~((y) - 1))
@@ -62,6 +60,8 @@
 
 /* Global constants used throughout the application. */
 
+#define THIRTY_FPS_DELAY                (u64)33333333                                                                           /* 1 / 30 = 33.33 milliseconds. */
+
 #define FS_SYSMODULE_TID                (u64)0x0100000000000000
 #define BOOT_SYSMODULE_TID              (u64)0x0100000000000005
 #define SPL_SYSMODULE_TID               (u64)0x0100000000000028
@@ -80,14 +80,13 @@
 #define APP_BASE_PATH                   HBMENU_BASE_PATH APP_TITLE "/"
 
 #define GAMECARD_PATH                   APP_BASE_PATH "Gamecard/"
-#define CERT_PATH                       APP_BASE_PATH "Certificate/"
 #define HFS_PATH                        APP_BASE_PATH "HFS/"
 #define NSP_PATH                        APP_BASE_PATH "NSP/"
 #define TICKET_PATH                     APP_BASE_PATH "Ticket/"
 #define NCA_PATH                        APP_BASE_PATH "NCA/"
 #define NCA_FS_PATH                     APP_BASE_PATH "NCA FS/"
 
-#define CONFIG_PATH                     DEVOPTAB_SDMC_DEVICE APP_BASE_PATH "config.json"
+#define CONFIG_FILE_NAME                APP_TITLE "_config.json"
 #define DEFAULT_CONFIG_PATH             "romfs:/default_config.json"
 
 #define NRO_NAME                        APP_TITLE ".nro"
@@ -121,7 +120,8 @@
 #define GITHUB_API_RELEASE_URL          GITHUB_API_URL "/repos/" GITHUB_REPOSITORY "/releases/latest"
 
 #define NSWDB_XML_URL                   "http://nswdb.com/xml.php"
-#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
+#define NSWDB_XML_NAME                  "NSWreleases.xml"
+#define NSWDB_XML_PATH                  APP_BASE_PATH NSWDB_XML_NAME
 
 #define BOREALIS_URL                    "https://github.com/natinusala/borealis"
 #define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"

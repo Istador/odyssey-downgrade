@@ -1,7 +1,7 @@
 /*
  * tasks.cpp
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -234,6 +234,11 @@ namespace nxdt::tasks
             /* Fire task event. */
             this->ums_event.fire(&(this->ums_devices));
         }
+    }
+
+    const UmsDeviceVector* UmsTask::GetUmsDevices(void)
+    {
+        return &(this->ums_devices);
     }
 
     void UmsTask::PopulateUmsDeviceVector(void)

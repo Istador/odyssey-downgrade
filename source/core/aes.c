@@ -1,7 +1,7 @@
 /*
  * aes.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -20,6 +20,21 @@
  */
 
 #include "nxdt_utils.h"
+
+void aes128EcbCrypt(void *dst, const void *src, const void *key, bool encrypt)
+{
+    if (!dst || !src || !key) return;
+
+    Aes128Context ctx = {0};
+    aes128ContextCreate(&ctx, key, encrypt);
+
+    if (encrypt)
+    {
+        aes128EncryptBlock(&ctx, dst, src);
+    } else {
+        aes128DecryptBlock(&ctx, dst, src);
+    }
+}
 
 size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src, size_t size, u64 sector, size_t sector_size, bool encrypt)
 {

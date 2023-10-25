@@ -1,7 +1,7 @@
 /*
  * nca.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -62,7 +62,8 @@ extern "C" {
 
 typedef enum {
     NcaDistributionType_Download = 0,
-    NcaDistributionType_GameCard = 1
+    NcaDistributionType_GameCard = 1,
+    NcaDistributionType_Count    = 2    ///< Total values supported by this enum.
 } NcaDistributionType;
 
 typedef enum {
@@ -71,10 +72,12 @@ typedef enum {
     NcaContentType_Control    = 2,
     NcaContentType_Manual     = 3,
     NcaContentType_Data       = 4,
-    NcaContentType_PublicData = 5
+    NcaContentType_PublicData = 5,
+    NcaContentType_Count      = 6   ///< Total values supported by this enum.
 } NcaContentType;
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
+/// TODO: update on master key changes.
 typedef enum {
     NcaKeyGeneration_Since100NUP  = 0,                              ///< 1.0.0 - 2.3.0.
     NcaKeyGeneration_Since300NUP  = 2,                              ///< 3.0.0.
@@ -90,7 +93,10 @@ typedef enum {
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
     NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
-    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1400NUP,
+    NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0 - 15.0.1.
+    NcaKeyGeneration_Since1600NUP = 16,                             ///< 16.0.0 - 16.1.0.
+    NcaKeyGeneration_Since1700NUP = 17,                             ///< 17.0.0+.
+    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1700NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
 
@@ -98,13 +104,14 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Application = 0,
     NcaKeyAreaEncryptionKeyIndex_Ocean       = 1,
     NcaKeyAreaEncryptionKeyIndex_System      = 2,
-    NcaKeyAreaEncryptionKeyIndex_Count       = 3
+    NcaKeyAreaEncryptionKeyIndex_Count       = 3    ///< Total values supported by this enum.
 } NcaKeyAreaEncryptionKeyIndex;
 
 /// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
+/// TODO: update on signature keygen changes.
 typedef enum {
     NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.2.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0+.
     NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
     NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
 } NcaSignatureKeyGeneration;
@@ -154,7 +161,7 @@ typedef struct {
     u64 content_size;
     u64 program_id;
     u32 content_index;
-    SdkAddOnVersion sdk_addon_version;
+    Version sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
     u8 main_signature_key_generation;                       ///< NcaSignatureKeyGeneration.
     u8 reserved[0xE];
@@ -168,17 +175,19 @@ NXDT_ASSERT(NcaHeader, 0x400);
 
 typedef enum {
     NcaFsType_RomFs       = 0,
-    NcaFsType_PartitionFs = 1
+    NcaFsType_PartitionFs = 1,
+    NcaFsType_Count       = 2   ///< Total values supported by this enum.
 } NcaFsType;
 
 typedef enum {
     NcaHashType_Auto                      = 0,
-    NcaHashType_None                      = 1,
+    NcaHashType_None                      = 1,  ///< Possibly used by all filesystem types.
     NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
     NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
     NcaHashType_AutoSha3                  = 4,
     NcaHashType_HierarchicalSha3256       = 5,  ///< Used by NcaFsType_PartitionFs.
-    NcaHashType_HierarchicalIntegritySha3 = 6   ///< Used by NcaFsType_RomFs.
+    NcaHashType_HierarchicalIntegritySha3 = 6,  ///< Used by NcaFsType_RomFs.
+    NcaHashType_Count                     = 7   ///< Total values supported by this enum.
 } NcaHashType;
 
 typedef enum {
@@ -188,13 +197,15 @@ typedef enum {
     NcaEncryptionType_AesCtr                = 3,
     NcaEncryptionType_AesCtrEx              = 4,
     NcaEncryptionType_AesCtrSkipLayerHash   = 5,
-    NcaEncryptionType_AesCtrExSkipLayerHash = 6
+    NcaEncryptionType_AesCtrExSkipLayerHash = 6,
+    NcaEncryptionType_Count                 = 7     ///< Total values supported by this enum.
 } NcaEncryptionType;
 
 typedef enum {
     NcaMetaDataHashType_None                      = 0,
     NcaMetaDataHashType_HierarchicalIntegrity     = 1,
-    NcaMetaDataHashType_HierarchicalIntegritySha3 = 2
+    NcaMetaDataHashType_HierarchicalIntegritySha3 = 2,
+    NcaMetaDataHashType_Count                     = 3   ///< Total values supported by this enum.
 } NcaMetaDataHashType;
 
 typedef struct {
@@ -358,17 +369,21 @@ typedef enum {
     NcaFsSectionType_Invalid     = 4
 } NcaFsSectionType;
 
+// Forward declaration for NcaFsSectionContext.
+typedef struct _NcaContext NcaContext;
+
 /// Unlike NCA contexts, we don't need to keep a hash for the NCA FS section header in NCA FS section contexts.
 /// This is because the functions that modify the NCA FS section header also update the NCA FS section header hash stored in the NCA header.
 typedef struct {
     bool enabled;                       ///< Set to true if this NCA FS section has passed all validation checks and can be safely used.
-    void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
+    NcaContext *nca_ctx;                ///< NcaContext. Used to perform NCA reads.
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
-    u8 section_idx;                     ///< Index within [0 - 3].
+    u8 section_idx;                     ///< Index within [0, NCA_FS_HEADER_COUNT).
     u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
     u64 section_size;                   ///< Placed here for convenience.
+    char section_size_str[0x10];        ///< Placed here for convenience.
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
@@ -400,9 +415,10 @@ typedef struct {
 } NcaFsSectionContext;
 
 typedef enum {
-    NcaVersion_Nca0 = 0,
-    NcaVersion_Nca2 = 2,
-    NcaVersion_Nca3 = 3
+    NcaVersion_Nca0  = 0,
+    NcaVersion_Nca2  = 1,
+    NcaVersion_Nca3  = 2,
+    NcaVersion_Count = 3    ///< Total values supported by this enum.
 } NcaVersion;
 
 typedef struct {
@@ -418,20 +434,23 @@ typedef struct {
 
 NXDT_ASSERT(NcaDecryptedKeyArea, NCA_KEY_AREA_USED_SIZE);
 
-typedef struct {
+struct _NcaContext {
     u8 storage_id;                                      ///< NcmStorageId.
     NcmContentStorage *ncm_storage;                     ///< Pointer to a NcmContentStorage instance. Used to read NCA data from eMMC/SD.
     u64 gamecard_offset;                                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
-    NcmContentId content_id;                            ///< Also used to read NCA data.
+    u64 title_id;                                       ///< ID from the title that owns this NCA. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    Version title_version;                              ///< Version from the title that owns this NCA. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    u8 title_type;                                      ///< NcmContentMetaType. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    NcmContentId content_id;                            ///< Content ID for this NCA. Used to read NCA data from eMMC/SD. Retrieved from NcmContentInfo.
     char content_id_str[0x21];
     u8 hash[SHA256_HASH_SIZE];                          ///< Manually calculated (if needed).
     char hash_str[0x41];
     u8 format_version;                                  ///< NcaVersion.
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
+    char content_size_str[0x10];                        ///< Placed here for convenience.
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
-    u32 title_version;
     bool rights_id_available;
     bool titlekey_retrieved;
     bool valid_main_signature;
@@ -448,7 +467,7 @@ typedef struct {
     void *content_type_ctx;                             ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
     bool content_type_ctx_patch;                        ///< Set to true if a NCA patch generated by the content type context is needed and hasn't been completely written yet.
     u32 content_type_ctx_data_idx;                      ///< Start index for the data generated by the content type context. Used while creating NSPs.
-} NcaContext;
+};
 
 typedef struct {
     bool written;   ///< Set to true if this patch has already been written.
@@ -476,12 +495,12 @@ bool ncaAllocateCryptoBuffer(void);
 void ncaFreeCryptoBuffer(void);
 
 /// Initializes a NCA context.
-/// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
+/// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid HashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, ticket data will need to be retrieved.
-/// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or be used to read ticket data that has already been retrieved.
+/// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.

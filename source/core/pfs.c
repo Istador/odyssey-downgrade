@@ -1,7 +1,7 @@
 /*
  * pfs.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -27,7 +27,6 @@
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
-    NcaContext *nca_ctx = NULL;
     u32 magic = 0;
 
     PartitionFileSystemHeader pfs_header = {0};
@@ -36,8 +35,8 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     bool success = false, dump_fs_header = false;
 
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->has_sparse_layer || nca_fs_ctx->section_type != NcaFsSectionType_PartitionFs || \
-        (nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256 && nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha3256) || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
-        (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
+        (nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256 && nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha3256) || !nca_fs_ctx->nca_ctx || \
+        (nca_fs_ctx->nca_ctx->rights_id_available && !nca_fs_ctx->nca_ctx->titlekey_retrieved))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -48,7 +47,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
 
     /* Initialize NCA storage context. */
     NcaStorageContext *storage_ctx = &(out->storage_ctx);
-    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx))
+    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx, NULL))
     {
         LOG_MSG_ERROR("Failed to initialize NCA storage context!");
         goto end;
@@ -192,7 +191,7 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
 
-    LOG_MSG_ERROR("Unable to find Partition FS entry \"%s\"!", name);
+    if (strcmp(name, "main.npdm") != 0) LOG_MSG_ERROR("Unable to find Partition FS entry \"%s\"!", name);
 
     return false;
 }

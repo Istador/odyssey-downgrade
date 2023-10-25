@@ -1,7 +1,7 @@
 /*
  * pfs.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -157,7 +157,7 @@ NX_INLINE void pfsWriteEntryPatchToMemoryBuffer(PartitionFileSystemContext *ctx,
 {
     if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx || \
         ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular) return;
-    ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
+    ncaWriteHierarchicalSha256PatchToMemoryBuffer(ctx->nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
 }
 
 NX_INLINE void pfsFreeEntryPatch(NcaHierarchicalSha256Patch *patch)

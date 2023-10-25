@@ -1,7 +1,7 @@
 /*
  * options_tab.cpp
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -395,8 +395,8 @@ namespace nxdt::views
 
         /* Overclock. */
         brls::ToggleListItem *overclock = new brls::ToggleListItem("options_tab/overclock/label"_i18n, configGetBoolean("overclock"), \
-                                                                   "options_tab/overclock/description"_i18n, "options_tab/overclock/value_enabled"_i18n, \
-                                                                   "options_tab/overclock/value_disabled"_i18n);
+                                                                   "options_tab/overclock/description"_i18n, "generic/value_enabled"_i18n, \
+                                                                   "generic/value_disabled"_i18n);
 
         overclock->getClickEvent()->subscribe([](brls::View* view) {
             /* Get current value. */

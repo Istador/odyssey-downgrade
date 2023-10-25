@@ -1,7 +1,7 @@
 /*
  * config.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -60,6 +60,7 @@ void configSet##functype(const char *path, vartype value) { \
 static Mutex g_configMutex = 0;
 static bool g_configInterfaceInit = false;
 
+static char g_configJsonPath[FS_MAX_PATH] = {0};
 static struct json_object *g_configJson = NULL;
 
 /* Function prototypes. */
@@ -118,10 +119,29 @@ CONFIG_SETTER(Integer, int);
 
 static bool configParseConfigJson(void)
 {
-    bool use_default_config = true, ret = false;
+    bool use_default_config = true, use_root = true, ret = false;
+    const char *launch_path = utilsGetLaunchPath();
+    char *ptr1 = NULL, *ptr2 = NULL;
+
+    /* Generate config JSON path. */
+    if (launch_path)
+    {
+        ptr1 = strchr(launch_path, '/');
+        ptr2 = strrchr(launch_path, '/');
+
+        if (ptr1 && ptr2 && ptr1 != ptr2)
+        {
+            /* Use config JSON from the current working directory. */
+            snprintf(g_configJsonPath, sizeof(g_configJsonPath), "%.*s" CONFIG_FILE_NAME, (int)((ptr2 - launch_path) + 1), launch_path);
+            use_root = false;
+        }
+    }
+
+    /* Use config JSON from the SD card root directory. */
+    if (use_root) sprintf(g_configJsonPath, DEVOPTAB_SDMC_DEVICE "/" CONFIG_FILE_NAME);
 
     /* Read config JSON. */
-    g_configJson = json_object_from_file(CONFIG_PATH);
+    g_configJson = json_object_from_file(g_configJsonPath);
     if (g_configJson)
     {
         /* Validate configuration. */
@@ -157,7 +177,7 @@ static bool configParseConfigJson(void)
 static void configWriteConfigJson(void)
 {
     if (!g_configJson) return;
-    if (json_object_to_file_ext(CONFIG_PATH, g_configJson, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY) != 0) jsonLogLastError();
+    if (json_object_to_file_ext(g_configJsonPath, g_configJson, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY) != 0) jsonLogLastError();
 }
 
 static void configFreeConfigJson(void)
@@ -169,7 +189,7 @@ static void configFreeConfigJson(void)
 
 static bool configValidateJsonRootObject(const struct json_object *obj)
 {
-    bool ret = false, overclock_found = false, naming_convention_found = false, dump_destination_found = false, gamecard_found = false;
+    bool ret = false, overclock_found = false, naming_convention_found = false, output_storage_found = false, gamecard_found = false;
     bool nsp_found = false, ticket_found = false, nca_fs_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
@@ -178,7 +198,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
     {
         CONFIG_VALIDATE_FIELD(Boolean, overclock);
         CONFIG_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_Count - 1);
-        CONFIG_VALIDATE_FIELD(Integer, dump_destination, ConfigDumpDestination_SdCard, ConfigDumpDestination_Count - 1);
+        CONFIG_VALIDATE_FIELD(Integer, output_storage, ConfigOutputStorage_SdCard, ConfigOutputStorage_Count - 1);
         CONFIG_VALIDATE_OBJECT(GameCard, gamecard);
         CONFIG_VALIDATE_OBJECT(Nsp, nsp);
         CONFIG_VALIDATE_OBJECT(Ticket, ticket);
@@ -186,7 +206,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
         goto end;
     }
 
-    ret = (overclock_found && naming_convention_found && dump_destination_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
+    ret = (overclock_found && naming_convention_found && output_storage_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
 
 end:
     return ret;
@@ -194,21 +214,23 @@ end:
 
 static bool configValidateJsonGameCardObject(const struct json_object *obj)
 {
-    bool ret = false, append_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false, checksum_lookup_method_found = false;
+    bool ret = false, prepend_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false;
+    bool checksum_lookup_method_found = false, write_raw_hfs_partition_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
     json_object_object_foreach(obj, key, val)
     {
-        CONFIG_VALIDATE_FIELD(Boolean, append_key_area);
+        CONFIG_VALIDATE_FIELD(Boolean, prepend_key_area);
         CONFIG_VALIDATE_FIELD(Boolean, keep_certificate);
         CONFIG_VALIDATE_FIELD(Boolean, trim_dump);
         CONFIG_VALIDATE_FIELD(Boolean, calculate_checksum);
         CONFIG_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_Count - 1);
+        CONFIG_VALIDATE_FIELD(Boolean, write_raw_hfs_partition);
         goto end;
     }
 
-    ret = (append_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found);
+    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found && write_raw_hfs_partition_found);
 
 end:
     return ret;
@@ -217,7 +239,8 @@ end:
 static bool configValidateJsonNspObject(const struct json_object *obj)
 {
     bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false;
-    bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false, append_authoringtool_data_found = false, lookup_checksum_found = false;
+    bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false;
+    bool generate_authoringtool_data_found = false, lookup_checksum_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
@@ -231,12 +254,12 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, enable_video_capture);
         CONFIG_VALIDATE_FIELD(Boolean, disable_hdcp);
         CONFIG_VALIDATE_FIELD(Boolean, lookup_checksum);
-        CONFIG_VALIDATE_FIELD(Boolean, append_authoringtool_data);
+        CONFIG_VALIDATE_FIELD(Boolean, generate_authoringtool_data);
         goto end;
     }
 
     ret = (set_download_distribution_found && remove_console_data_found && remove_titlekey_crypto_found && disable_linked_account_requirement_found && \
-           enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && append_authoringtool_data_found && lookup_checksum_found);
+           enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && generate_authoringtool_data_found && lookup_checksum_found);
 
 end:
     return ret;
@@ -262,17 +285,18 @@ end:
 
 static bool configValidateJsonNcaFsObject(const struct json_object *obj)
 {
-    bool ret = false, use_layeredfs_dir_found = false;
+    bool ret = false, write_raw_section_found = false, use_layeredfs_dir_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
     json_object_object_foreach(obj, key, val)
     {
+        CONFIG_VALIDATE_FIELD(Boolean, write_raw_section);
         CONFIG_VALIDATE_FIELD(Boolean, use_layeredfs_dir);
         goto end;
     }
 
-    ret = use_layeredfs_dir_found;
+    ret = (write_raw_section_found && use_layeredfs_dir_found);
 
 end:
     return ret;

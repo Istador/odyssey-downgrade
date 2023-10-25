@@ -1,7 +1,7 @@
 /*
  * nso.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -31,12 +31,11 @@ static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, u8 *rodata_buf, 
 
 bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry)
 {
-    NcaContext *nca_ctx = NULL;
     u8 *rodata_buf = NULL;
     bool success = false, dump_nso_header = false;
 
-    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)pfs_ctx->nca_fs_ctx->nca_ctx) || \
-        nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
+    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !pfs_ctx->nca_fs_ctx->nca_ctx || \
+        pfs_ctx->nca_fs_ctx->nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
         pfs_ctx->header_size <= sizeof(PartitionFileSystemHeader) || !pfs_ctx->header || !pfs_entry)
     {
         LOG_MSG_ERROR("Invalid parameters!");
@@ -234,7 +233,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     /* Read .rodata segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_info.file_offset))
     {
-        LOG_MSG_ERROR("Failed to read .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to read .rodata segment in NSO \"%s\"!", nso_ctx->nso_filename);
         goto end;
     }
 
@@ -244,7 +243,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         if ((lz4_res = LZ4_decompress_safe((char*)rodata_read_ptr, (char*)rodata_buf, (int)nso_ctx->nso_header.rodata_file_size, (int)rodata_buf_size)) != \
             (int)nso_ctx->nso_header.rodata_segment_info.size)
         {
-            LOG_MSG_ERROR("LZ4 decompression failed for NRO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
+            LOG_MSG_ERROR("LZ4 decompression failed for NSO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
             goto end;
         }
     }
@@ -255,7 +254,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_info.size);
         if (memcmp(rodata_hash, nso_ctx->nso_header.rodata_segment_hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG_ERROR(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
+            LOG_MSG_ERROR(".rodata segment checksum mismatch for NSO \"%s\"!", nso_ctx->nso_filename);
             goto end;
         }
     }

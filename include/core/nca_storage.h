@@ -1,7 +1,7 @@
 /*
  * nca_storage.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -31,11 +31,12 @@ extern "C" {
 #endif
 
 typedef enum {
-    NcaStorageBaseStorageType_Invalid    = 0,   /* Placeholder. */
+    NcaStorageBaseStorageType_Invalid    = 0,   ///< Placeholder.
     NcaStorageBaseStorageType_Regular    = 1,
     NcaStorageBaseStorageType_Sparse     = 2,
     NcaStorageBaseStorageType_Indirect   = 3,
-    NcaStorageBaseStorageType_Compressed = 4
+    NcaStorageBaseStorageType_Compressed = 4,
+    NcaStorageBaseStorageType_Count      = 5    ///< Total values supported by this enum.
 } NcaStorageBaseStorageType;
 
 /// Used to perform multi-layered reads within a single NCA FS section.
@@ -48,12 +49,10 @@ typedef struct {
     BucketTreeContext *compressed_storage;  ///< Compressed storage context.
 } NcaStorageContext;
 
-/// Initializes a NCA storage context using a NCA FS section context.
-bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx);
-
-/// Sets a storage from the provided Base NcaStorageContext as the original substorage for the provided Patch NcaStorageContext's Indirect Storage.
-/// Needed to perform combined reads between a base NCA and a patch NCA.
-bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStorageContext *base_ctx);
+/// Initializes a NCA storage context using a NCA FS section context, optionally providing a pointer to a base NcaStorageContext.
+/// 'base_ctx' shall be provided if dealing with a patch NCA with available base NCA data. This is needed to perform combined reads between a base NCA and a patch NCA.
+/// 'base_ctx' shall be NULL if dealing with a base NCA *or* a patch NCA with missing base NCA data.
+bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx, NcaStorageContext *base_ctx);
 
 /// Retrieves the underlying NCA FS section's hierarchical hash target layer extents. Virtual extents may be returned, depending on the base storage type.
 /// Output offset is relative to the start of the NCA FS section.

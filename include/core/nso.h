@@ -1,7 +1,7 @@
 /*
  * nso.h
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -34,12 +34,14 @@ extern "C" {
 #define NSO_MOD_MAGIC       0x4D4F4430  /* "MOD0". */
 
 typedef enum {
+    NsoFlags_None         = 0,
     NsoFlags_TextCompress = BIT(0), ///< Determines if .text segment is LZ4-compressed.
     NsoFlags_RoCompress   = BIT(1), ///< Determines if .rodata segment is LZ4-compressed.
     NsoFlags_DataCompress = BIT(2), ///< Determines if .data segment is LZ4-compressed.
     NsoFlags_TextHash     = BIT(3), ///< Determines if .text segment hash must be checked during load.
     NsoFlags_RoHash       = BIT(4), ///< Determines if .rodata segment hash must be checked during load.
-    NsoFlags_DataHash     = BIT(5)  ///< Determines if .data segment hash must be checked during load.
+    NsoFlags_DataHash     = BIT(5), ///< Determines if .data segment hash must be checked during load.
+    NsoFlags_Count        = 6       ///< Total values supported by this enum.
 } NsoFlags;
 
 typedef struct {

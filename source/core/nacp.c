@@ -1,7 +1,7 @@
 /*
  * nacp.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -507,7 +507,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 
     /* StartupUserAccountOption. */
     if (!NACP_ADD_BITFLAG("StartupUserAccountOption", &(nacp->startup_user_account_option), sizeof(nacp->startup_user_account_option), NacpStartupUserAccountOption_Count, \
-                          nacpGetStartupUserAccountOptionString, true)) goto end;
+                          nacpGetStartupUserAccountOptionString, false)) goto end;
 
     /* UserAccountSwitchLock. */
     if (!NACP_ADD_ENUM("UserAccountSwitchLock", nacp->user_account_switch_lock, nacpGetUserAccountSwitchLockString)) goto end;
@@ -618,7 +618,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         sha256CalculateHash(icon_hash, icon_ctx->icon_data, icon_ctx->icon_size);
 
         /* Generate icon hash string. Only the first half from the hash is used. */
-        utilsGenerateHexStringFromData(icon_hash_str, sizeof(icon_hash_str), icon_hash, sizeof(icon_hash) / 2, false);
+        utilsGenerateHexString(icon_hash_str, sizeof(icon_hash_str), icon_hash, sizeof(icon_hash) / 2, false);
 
         /* Add XML element. */
         if (!NACP_ADD_FMT_STR_T1("  <Icon>\n" \
@@ -726,7 +726,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         if (!NACP_ADD_FMT_STR_T1("  <NeighborDetectionClientConfiguration>\n")) goto end;
 
         /* SendGroupConfiguration. */
-        utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key), false);
+        utilsGenerateHexString(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key), false);
 
         if (!NACP_ADD_FMT_STR_T1("    <SendGroupConfiguration>\n" \
                                  "      <GroupId>0x%016lx</GroupId>\n" \
@@ -740,7 +740,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         {
             NacpApplicationNeighborDetectionGroupConfiguration *rgc = &(ndcc->receivable_group_configurations[i]);
 
-            utilsGenerateHexStringFromData(key_str, sizeof(key_str), rgc->key, sizeof(rgc->key), false);
+            utilsGenerateHexString(key_str, sizeof(key_str), rgc->key, sizeof(rgc->key), false);
 
             if (!NACP_ADD_FMT_STR_T1("    <ReceivableGroupConfiguration>\n" \
                                      "      <GroupId>0x%016lx</GroupId>\n" \
@@ -838,7 +838,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!NACP_ADD_ENUM("UndecidedParameter75b8b", nacp->undecided_parameter_75b8b, nacpGetUndecidedParameter75b8bString)) goto end;
 
     /* ApplicationId. */
-    if (!NACP_ADD_U64("ApplicationId", nacp_ctx->nca_ctx->header.program_id, true, true)) goto end;
+    //if (!NACP_ADD_U64("ApplicationId", nacp_ctx->nca_ctx->header.program_id, true, true)) goto end;
 
     /* FilterDescriptionFilePath and CompressionFileConfigurationFilePath. */
     /*if (!NACP_ADD_FMT_STR_T1("  <FilterDescriptionFilePath />\n" \
@@ -847,15 +847,15 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* ContentsAvailabilityTransitionPolicy. */
     if (!NACP_ADD_ENUM("ContentsAvailabilityTransitionPolicy", nacp->contents_availability_transition_policy, nacpGetContentsAvailabilityTransitionPolicyString)) goto end;
 
-    /* LimitedLicenseSettings. */
-    if (!NACP_ADD_FMT_STR_T1("  <LimitedLicenseSettings>\n" \
+    /* LimitedApplicationLicenseSettings. */
+    if (!NACP_ADD_FMT_STR_T1("  <LimitedApplicationLicenseSettings>\n" \
                              "    <RuntimeUpgrade>%s</RuntimeUpgrade>\n" \
-                             "    <SupportingLimitedLicenses>\n" \
-                             "      <LimitedLicense>%s</LimitedLicense>\n" \
-                             "    </SupportingLimitedLicenses>\n" \
-                             "  </LimitedLicenseSettings>\n", \
+                             "    <SupportingLimitedApplicationLicenses>\n" \
+                             "      <LimitedApplicationLicense>%s</LimitedApplicationLicense>\n" \
+                             "    </SupportingLimitedApplicationLicenses>\n" \
+                             "  </LimitedApplicationLicenseSettings>\n", \
                              nacpGetRuntimeUpgradeString(nacp->runtime_upgrade), \
-                             (nacp->supporting_limited_licenses & NacpSupportingLimitedLicenses_Demo) ? "Demo" : "None")) goto end;
+                             (nacp->supporting_limited_application_licenses & NacpSupportingLimitedApplicationLicenses_Demo) ? "Demo" : "None")) goto end;
 
     if (!(success = NACP_ADD_FMT_STR_T1("</Application>"))) goto end;
 

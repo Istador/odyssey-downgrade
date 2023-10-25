@@ -1,7 +1,7 @@
 /*
  * nxdt_log.c
  *
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -72,7 +72,7 @@ __attribute__((format(printf, 5, 6))) void logWriteFormattedStringToLogFile(u8 l
 
 __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!dst || !dst_size || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
 
@@ -85,7 +85,8 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
     struct tm ts = {0};
     struct timespec now = {0};
 
-    if (dst_str_len >= dst_cur_size) return;
+    /* Sanity check. */
+    if (dst_cur_size && dst_str_len >= dst_cur_size) return;
 
     va_start(args, fmt);
 
@@ -106,7 +107,7 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
 
     log_str_len = (size_t)(str1_len + str2_len + 3);
 
-    if (!dst_cur_size || log_str_len > (dst_cur_size - dst_str_len))
+    if (!dst_ptr || !dst_cur_size || log_str_len > (dst_cur_size - dst_str_len))
     {
         /* Update buffer size. */
         dst_cur_size = (dst_str_len + log_str_len);
@@ -148,7 +149,7 @@ __attribute__((format(printf, 7, 8))) void logWriteBinaryDataToLogFile(const voi
     if (!data_str) goto end;
 
     /* Generate hex string representation. */
-    utilsGenerateHexStringFromData(data_str, data_str_size, data, data_size, true);
+    utilsGenerateHexString(data_str, data_str_size, data, data_size, true);
     strcat(data_str, CRLF);
 
     SCOPED_LOCK(&g_logMutex)
@@ -430,13 +431,13 @@ static bool logOpenLogFile(void)
 
         if (ptr1 && ptr2 && ptr1 != ptr2)
         {
-            /* Create logfile in the current working directory. */
+            /* Create logfile in the current working directory. Strip the devoptab device name prefix while we're at it, since we won't need it. */
             snprintf(path, sizeof(path), "%.*s" LOG_FILE_NAME, (int)((ptr2 - ptr1) + 1), ptr1);
             use_root = false;
         }
     }
 
-    /* Create logfile in the SD card root directory. */
+    /* Create logfile in the SD card root directory, if needed. */
     if (use_root) sprintf(path, "/" LOG_FILE_NAME);
 
     /* Create file. This will fail if the logfile exists, so we don't check its return value. */
@@ -452,17 +453,17 @@ static bool logOpenLogFile(void)
         {
             size_t len = 0;
 
-            /* Write UTF-8 BOM right away (if needed). */
             if (!g_logFileOffset)
             {
+                /* Write UTF-8 BOM if the logfile is empty. */
                 len = strlen(UTF8_BOM);
-                fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, len, FsWriteOption_Flush);
-                g_logFileOffset += (s64)len;
+                rc = fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, len, FsWriteOption_Flush);
+            } else {
+                /* Write session separator if the logfile isn't empty. */
+                len = strlen(g_logSessionSeparator);
+                rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logSessionSeparator, len, FsWriteOption_Flush);
             }
 
-            /* Write session separator right away. */
-            len = strlen(g_logSessionSeparator);
-            rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logSessionSeparator, len, FsWriteOption_Flush);
             if (R_SUCCEEDED(rc)) g_logFileOffset += (s64)len;
         }
     }

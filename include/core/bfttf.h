@@ -2,7 +2,7 @@
  * bftff.h
  *
  * Copyright (c) 2018, simontime.
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -37,7 +37,7 @@ typedef enum {
     BfttfFontType_ChineseSimplified    = 3, ///< Simplified Chinese.
     BfttfFontType_ExtChineseSimplified = 4, ///< Extended Simplified Chinese.
     BfttfFontType_ChineseTraditional   = 5, ///< Traditional Chinese.
-    BfttfFontType_Total                = 6  ///< Total fonts supported by this enum.
+    BfttfFontType_Count                = 6  ///< Total fonts supported by this enum.
 } BfttfFontType;
 
 /// Loosely based on PlFontData.
