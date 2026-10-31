@@ -1,7 +1,7 @@
 /*
  * nca_key_enums.h
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -51,8 +51,10 @@ typedef enum : u8 {
     NcaKeyGeneration_Since1800NUP = 18,                             ///< 18.0.0 - 18.1.0.
     NcaKeyGeneration_Since1900NUP = 19,                             ///< 19.0.0 - 19.0.1.
     NcaKeyGeneration_Since2000NUP = 20,                             ///< 20.0.0 - 20.5.0.
-    NcaKeyGeneration_Since2100NUP = 21,                             ///< 21.0.0+.
-    NcaKeyGeneration_Current      = NcaKeyGeneration_Since2100NUP,
+    NcaKeyGeneration_Since2100NUP = 21,                             ///< 21.0.0 - 21.2.0.
+    NcaKeyGeneration_Since2200NUP = 22,                             ///< 22.0.0 - 22.5.0.
+    NcaKeyGeneration_Since2300NUP = 23,                             ///< 23.0.0+.
+    NcaKeyGeneration_Current      = NcaKeyGeneration_Since2300NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
 

@@ -1,7 +1,7 @@
 /*
  * nca_storage.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -99,7 +99,7 @@ end:
     return success;
 }
 
-bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64 *out_size)
+bool ncaStorageGetHashTargetExtents(const NcaStorageContext *ctx, u64 *out_offset, u64 *out_size)
 {
     if (!ncaStorageIsValidContext(ctx) || (!out_offset && !out_size))
     {

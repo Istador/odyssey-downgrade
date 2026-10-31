@@ -3,7 +3,7 @@
  *
  * Loosely based on fs_dev.c from libnx, et al.
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -34,10 +34,10 @@
 /* Type definitions. */
 
 typedef struct {
-    u32 index;                      ///< Hash FS entry index.
-    HashFileSystemEntry *hfs_entry; ///< Hash FS entry metadata.
-    const char *name;               ///< Entry name.
-    u64 offset;                     ///< Current offset within Hash FS entry data.
+    u32 index;                              ///< Hash FS entry index.
+    const HashFileSystemEntry *hfs_entry;   ///< Hash FS entry metadata.
+    const char *name;                       ///< Entry name.
+    u64 offset;                             ///< Current offset within Hash FS entry data.
 } HashFileSystemFileState;
 
 typedef struct {
@@ -227,7 +227,7 @@ end:
 static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
     u32 index = 0;
-    HashFileSystemEntry *hfs_entry = NULL;
+    const HashFileSystemEntry *hfs_entry = NULL;
 
     DEVOPTAB_INIT_VARS;
     HFS_DEV_INIT_FS_ACCESS;
@@ -292,7 +292,7 @@ end:
 
 static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, struct stat *filestat)
 {
-    HashFileSystemEntry *hfs_entry = NULL;
+    const HashFileSystemEntry *hfs_entry = NULL;
     const char *fname = NULL;
 
     HFS_DEV_INIT_DIR_VARS;

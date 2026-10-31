@@ -1,7 +1,7 @@
 /*
  * legal_info.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -33,7 +33,7 @@ bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
     }
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *xml_entry = NULL;
+    const RomFileSystemFileEntry *xml_entry = NULL;
 
     bool success = false;
 

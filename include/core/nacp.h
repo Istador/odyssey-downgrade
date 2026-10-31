@@ -1,7 +1,7 @@
 /*
  * nacp.h
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -32,12 +32,59 @@ extern "C" {
 
 #define NACP_MAX_ICON_SIZE  0x20000 /* 128 KiB. */
 
+/// Indexes used to access NACP Title structs.
+typedef enum : u8 {
+    NacpLanguage_AmericanEnglish        = 0,
+    NacpLanguage_BritishEnglish         = 1,
+    NacpLanguage_Japanese               = 2,
+    NacpLanguage_French                 = 3,
+    NacpLanguage_German                 = 4,
+    NacpLanguage_LatinAmericanSpanish   = 5,
+    NacpLanguage_Spanish                = 6,
+    NacpLanguage_Italian                = 7,
+    NacpLanguage_Dutch                  = 8,
+    NacpLanguage_CanadianFrench         = 9,
+    NacpLanguage_Portuguese             = 10,
+    NacpLanguage_Russian                = 11,
+    NacpLanguage_Korean                 = 12,
+    NacpLanguage_TraditionalChinese     = 13,
+    NacpLanguage_SimplifiedChinese      = 14,
+    NacpLanguage_BrazilianPortuguese    = 15,
+    NacpLanguage_Polish                 = 16,
+    NacpLanguage_Thai                   = 17,
+    NacpLanguage_Count                  = 18,                                 ///< Total values supported by this enum.
+
+    /// Old.
+    NacpLanguage_Taiwanese              = NacpLanguage_TraditionalChinese,
+    NacpLanguage_Chinese                = NacpLanguage_SimplifiedChinese,
+
+    /// Used exclusively for NacpTitles.
+    NacpLanguage_Format0EntryCount      = 16,
+    NacpLanguage_Format1EntryCount      = 32
+} NacpLanguage;
+
 typedef struct {
     char name[0x200];
     char publisher[0x100];
 } NacpTitle;
 
 NXDT_ASSERT(NacpTitle, 0x300);
+
+typedef struct {
+    u16 data_size;      ///< Size of the Zlib-compressed blob within 'data'.
+    u8 data[0x2FFE];    ///< Zlib-compressed blob, using wbits=-15.
+} NacpTitleFormat1;
+
+NXDT_ASSERT(NacpTitleFormat1, 0x3000);
+
+typedef struct {
+    union {
+        NacpTitle format0[NacpLanguage_Format0EntryCount];  // Used if titles_data_format is set to NacpTitlesDataFormat_Format0.
+        NacpTitleFormat1 format1;                           // Used if titles_data_format is set to NacpTitlesDataFormat_Format1. Supports twice as many title entries.
+    };
+} NacpTitleBlock;
+
+NXDT_ASSERT(NacpTitleBlock, 0x3000);
 
 typedef enum : u8 {
     NacpStartupUserAccount_None                                       = 0,
@@ -71,31 +118,6 @@ typedef enum : u32 {
     NacpAttribute_Count                    = 3          ///< Total values supported by this enum.
 } NacpAttribute;
 
-/// Indexes used to access NACP Title structs.
-typedef enum : u8 {
-    NacpLanguage_AmericanEnglish      = 0,
-    NacpLanguage_BritishEnglish       = 1,
-    NacpLanguage_Japanese             = 2,
-    NacpLanguage_French               = 3,
-    NacpLanguage_German               = 4,
-    NacpLanguage_LatinAmericanSpanish = 5,
-    NacpLanguage_Spanish              = 6,
-    NacpLanguage_Italian              = 7,
-    NacpLanguage_Dutch                = 8,
-    NacpLanguage_CanadianFrench       = 9,
-    NacpLanguage_Portuguese           = 10,
-    NacpLanguage_Russian              = 11,
-    NacpLanguage_Korean               = 12,
-    NacpLanguage_TraditionalChinese   = 13,
-    NacpLanguage_SimplifiedChinese    = 14,
-    NacpLanguage_BrazilianPortuguese  = 15,
-    NacpLanguage_Count                = 16,                                 ///< Total values supported by this enum.
-
-    /// Old.
-    NacpLanguage_Taiwanese            = NacpLanguage_TraditionalChinese,
-    NacpLanguage_Chinese              = NacpLanguage_SimplifiedChinese
-} NacpLanguage;
-
 typedef enum : u32 {
     NacpSupportedLanguage_None                 = 0,
     NacpSupportedLanguage_AmericanEnglish      = BIT(NacpLanguage_AmericanEnglish),
@@ -114,6 +136,8 @@ typedef enum : u32 {
     NacpSupportedLanguage_TraditionalChinese   = BIT(NacpLanguage_TraditionalChinese),
     NacpSupportedLanguage_SimplifiedChinese    = BIT(NacpLanguage_SimplifiedChinese),
     NacpSupportedLanguage_BrazilianPortuguese  = BIT(NacpLanguage_BrazilianPortuguese),
+    NacpSupportedLanguage_Polish               = BIT(NacpLanguage_Polish),
+    NacpSupportedLanguage_Thai                 = BIT(NacpLanguage_Thai),
     NacpSupportedLanguage_Count                = NacpLanguage_Count,                        ///< Total values supported by this enum.
 
     ///< Old.
@@ -294,6 +318,12 @@ typedef enum : u8 {
 } NacpApplicationErrorCodePrefix;
 
 typedef enum : u8 {
+    NacpTitlesDataFormat_Format0 = 0,   ///< 16 uncompressed entries.
+    NacpTitlesDataFormat_Format1 = 1,   ///< 32 Zlib-compressed (deflate) entries.
+    NacpTitlesDataFormat_Count   = 2    ///< Total values supported by this enum.
+} NacpTitlesDataFormat;
+
+typedef enum : u8 {
     NacpApparentPlatform_NX    = 0,
     NacpApparentPlatform_Ounce = 1,
     NacpApparentPlatform_Count = 2  ///< Total values supported by this enum.
@@ -378,10 +408,10 @@ typedef struct {
     u64 type;                                           ///< TODO: add enum with values.
     NacpApplicationControlDataConditionData data[0x8];
     u8 count;
-} NacpApplicationControlDataCondition;
+} NacpApplicationControlDataConditionStruct;
 #pragma pack(pop)
 
-NXDT_ASSERT(NacpApplicationControlDataCondition, 0x89);
+NXDT_ASSERT(NacpApplicationControlDataConditionStruct, 0x89);
 
 typedef enum : u8 {
     NacpAlbumFileExport_Allow = 0,
@@ -390,7 +420,7 @@ typedef enum : u8 {
 } NacpAlbumFileExport;
 
 typedef struct {
-    NacpTitle title[NacpLanguage_Count];
+    NacpTitleBlock title_block;
     char isbn[0x25];
     NacpStartupUserAccount startup_user_account;
     NacpUserAccountSwitchLock user_account_switch_lock;
@@ -444,7 +474,7 @@ typedef struct {
     u8 program_index;
     NacpRequiredNetworkServiceLicenseOnLaunch required_network_service_license_on_launch;
     NacpApplicationErrorCodePrefix application_error_code_prefix;
-    u8 reserved_2;
+    NacpTitlesDataFormat titles_data_format;                                                        ///< TODO: add to XML generation.
     u8 acd_index;                                                                                   ///< Application Control Data index. Used to access `Acd_{idx}` subdirectories within the Control NCA RomFS.
     NacpApparentPlatform apparent_platform;
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
@@ -454,20 +484,23 @@ typedef struct {
     NacpCrashScreenshotForProd crash_screenshot_for_prod;
     NacpCrashScreenshotForDev crash_screenshot_for_dev;
     NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
-    u8 reserved_3[0x4];
+    NacpSupportedLanguage supported_language_flag_for_nx_addon;                                     ///< TODO: add to XML generation.
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    NacpApplicationControlDataCondition application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles.
-    u8 initial_program_index;
-    u8 reserved_4[0x2];
-    u8 accessible_program_index_flags[0x4];                                                         ///< TODO: add structure / enum.
+    NacpApplicationControlDataConditionStruct application_control_data_condition;                   ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
+    u8 initial_program_index;                                                                       ///< TODO: add to XML generation.
+    u8 reserved_2[0x2];
+    u8 accessible_program_index_flags[0x4];                                                         ///< TODO: add structure / enum / XML generation.
     NacpAlbumFileExport album_file_export;
-    u8 reserved_5[0x7];
-    u8 save_data_certificate_bytes[0x80];                                                           ///< TODO: add structure.
-    u8 has_in_game_voice_chat;                                                                      ///< TODO: add enum with values.
-    u8 reserved_6[0x3];
-    u8 supported_extra_add_on_content_flag[0x4];                                                    ///< TODO: add structure / enum.
-    u8 reserved_7[0x698];
-    u8 platform_specific_region[0x400];                                                             ///< TODO: add structure.
+    u8 supress_force_console_mode;                                                                  ///< TODO: add enum with values / XML generation.
+    u8 reserved_3[0x6];
+    u8 save_data_certificate_bytes[0x80];                                                           ///< TODO: add structure / XML generation.
+    u8 has_in_game_voice_chat;                                                                      ///< TODO: add enum with values / XML generation.
+    u8 reserved_4[0x3];
+    u8 supported_extra_add_on_content_flag[0x4];                                                    ///< TODO: add structure / enum / XML generation.
+    u8 has_karaoke_feature;                                                                         ///< TODO: add structure / enum / XML generation.
+    u8 stream_play_save_data_key_type;                                                              ///< TODO: add enum with values / XML generation.
+    u8 reserved_5[0x696];
+    u8 platform_specific_region[0x400];                                                             ///< TODO: add structure / XML generation.
 } NsApplicationControlProperty;
 
 NXDT_ASSERT(NsApplicationControlProperty, 0x4000);
@@ -479,19 +512,20 @@ typedef struct {
 } NacpIconContext;
 
 typedef struct {
-    NcaContext *nca_ctx;                        ///< Pointer to the NCA context for the Control NCA from which NACP data is retrieved.
-    RomFileSystemContext romfs_ctx;             ///< RomFileSystemContext for the Control NCA FS section #0, which is where the NACP is stored.
-    RomFileSystemFileEntry *romfs_file_entry;   ///< RomFileSystemFileEntry for the NACP in the Control NCA FS section #0. Used to generate a RomFileSystemFileEntryPatch if needed.
-    RomFileSystemFileEntryPatch nca_patch;      ///< RomFileSystemFileEntryPatch generated if NACP modifications are needed. Used to seamlessly replace Control NCA data while writing it.
-                                                ///< Bear in mind that generating a patch modifies the NCA context.
-    NsApplicationControlProperty *data;         ///< Pointer to a dynamically allocated buffer that holds the full NACP.
-    u8 data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
-    u8 icon_count;                              ///< NACP icon count. May be zero if no icons are available.
-    NacpIconContext *icon_ctx;                  ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
-    char *authoring_tool_xml;                   ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
-                                                ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
-    u64 authoring_tool_xml_size;                ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
-                                                ///< This is always 0 unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
+    NcaContext *nca_ctx;                            ///< Pointer to the NCA context for the Control NCA from which NACP data is retrieved.
+    RomFileSystemContext romfs_ctx;                 ///< RomFileSystemContext for the Control NCA FS section #0, which is where the NACP is stored.
+    const RomFileSystemFileEntry *romfs_file_entry; ///< RomFileSystemFileEntry for the NACP in the Control NCA FS section #0. Used to generate a RomFileSystemFileEntryPatch if needed.
+    RomFileSystemFileEntryPatch nca_patch;          ///< RomFileSystemFileEntryPatch generated if NACP modifications are needed. Used to seamlessly replace Control NCA data while writing it.
+                                                    ///< Bear in mind that generating a patch modifies the NCA context.
+    NsApplicationControlProperty *data;             ///< Pointer to a dynamically allocated buffer that holds the full NACP.
+    NacpTitle *titles;                              ///< Pointer to a dynamically allocated buffer that holds the decompressed title entries.
+    u8 data_hash[SHA256_HASH_SIZE];                 ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
+    u8 icon_count;                                  ///< NACP icon count. May be zero if no icons are available.
+    NacpIconContext *icon_ctx;                      ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
+    char *authoring_tool_xml;                       ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
+                                                    ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
+    u64 authoring_tool_xml_size;                    ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
+                                                    ///< This is always 0 unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
 } NacpContext;
 
 /// Initializes a NacpContext using a previously initialized NcaContext (which must belong to a Control NCA).
@@ -565,7 +599,10 @@ NX_INLINE void nacpFreeContext(NacpContext *nacp_ctx)
 
     romfsFreeContext(&(nacp_ctx->romfs_ctx));
     romfsFreeFileEntryPatch(&(nacp_ctx->nca_patch));
+
     if (nacp_ctx->data) free(nacp_ctx->data);
+
+    if (nacp_ctx->titles) free(nacp_ctx->titles);
 
     if (nacp_ctx->icon_ctx)
     {
@@ -581,14 +618,15 @@ NX_INLINE void nacpFreeContext(NacpContext *nacp_ctx)
     memset(nacp_ctx, 0, sizeof(NacpContext));
 }
 
-NX_INLINE bool nacpIsValidIconContext(NacpIconContext *icon_ctx)
+NX_INLINE bool nacpIsValidIconContext(const NacpIconContext *icon_ctx)
 {
     return (icon_ctx && icon_ctx->language < NacpLanguage_Count && icon_ctx->icon_size && icon_ctx->icon_data);
 }
 
-NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
+NX_INLINE bool nacpIsValidContext(const NacpContext *nacp_ctx)
 {
-    if (!nacp_ctx || !nacp_ctx->nca_ctx || !nacp_ctx->romfs_file_entry || !nacp_ctx->data || (!nacp_ctx->icon_count && nacp_ctx->icon_ctx) || (nacp_ctx->icon_count && !nacp_ctx->icon_ctx)) return false;
+    if (!nacp_ctx || !nacp_ctx->nca_ctx || !nacp_ctx->romfs_file_entry || !nacp_ctx->data || !nacp_ctx->titles || \
+        (!nacp_ctx->icon_count && nacp_ctx->icon_ctx) || (nacp_ctx->icon_count && !nacp_ctx->icon_ctx)) return false;
 
     for(u8 i = 0; i < nacp_ctx->icon_count; i++)
     {

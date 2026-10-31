@@ -1,7 +1,7 @@
 /*
  * nxdt_includes.h
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -57,6 +57,9 @@
 /* Internet operations. */
 #include <arpa/inet.h>
 
+/* Zlib. */
+#include <zlib.h>
+
 /* Global defines. */
 #include "../defines.h"
 
@@ -75,9 +78,12 @@
 /* SHA3 checksum calculator. */
 #include "sha3.h"
 
-/* LZ4 (dec)compression. */
+/* LZ4 (de)compression. */
 #define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
 #include "lz4.h"
+
+/* Zstandard decompression with BIC support. */
+#include "zbic.h"
 
 /* Horizon OS version structs. */
 #include "hos_version_structs.h"

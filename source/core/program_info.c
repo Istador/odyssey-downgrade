@@ -1,7 +1,7 @@
 /*
  * program_info.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -108,8 +108,9 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
     for(i = 0; i < pfs_entry_count; i++)
     {
         /* Skip the main.npdm entry, as well as any other entries without a NSO header. */
-        PartitionFileSystemEntry *pfs_entry = pfsGetEntryByIndex(&(out->pfs_ctx), i);
-        char *pfs_entry_name = pfsGetEntryName(&(out->pfs_ctx), pfs_entry);
+        const PartitionFileSystemEntry *pfs_entry = pfsGetEntryByIndex(&(out->pfs_ctx), i);
+        const char *pfs_entry_name = pfsGetEntryName(&(out->pfs_ctx), pfs_entry);
+
         if (!pfs_entry || !pfs_entry_name || !strcmp(pfs_entry_name, "main.npdm") || !pfsReadEntryData(&(out->pfs_ctx), pfs_entry, &magic, sizeof(u32), 0) || \
             __builtin_bswap32(magic) != NSO_HEADER_MAGIC) continue;
 
@@ -170,7 +171,7 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     u64 xml_buf_size = 0;
 
     char *sdk_version = NULL, *build_type = NULL;
-    bool is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    bool is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags0.is_64bit_instruction == 1);
 
     u8 *npdm_acid = (u8*)program_info_ctx->npdm_ctx.acid_header;
     u64 npdm_acid_size = program_info_ctx->npdm_ctx.meta_header->acid_size, npdm_acid_b64_size = 0;
@@ -282,6 +283,28 @@ end:
     return success;
 }
 
+NsoContext *programInfoGetNsoContextByFilename(ProgramInfoContext *program_info_ctx, const char *filename)
+{
+    if (!programInfoIsValidContext(program_info_ctx) || !filename || !*filename)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    NsoContext *nso_ctx = NULL;
+
+    for(u32 i = 0; i < program_info_ctx->nso_count; i++)
+    {
+        nso_ctx = &(program_info_ctx->nso_ctx[i]);
+
+        if (nsoIsValidContext(nso_ctx) && !strcmp(nso_ctx->nso_filename, filename)) break;
+
+        nso_ctx = NULL;
+    }
+
+    return nso_ctx;
+}
+
 static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *program_info_ctx, char **sdk_version, char **build_type)
 {
     if (!program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !sdk_version || !build_type)
@@ -299,15 +322,8 @@ static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *p
     *sdk_version = *build_type = NULL;
 
     /* Locate "sdk" NSO. */
-    for(u32 i = 0; i < program_info_ctx->nso_count; i++)
-    {
-        nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (nso_ctx->nso_filename && !strcmp(nso_ctx->nso_filename, "sdk") && nso_ctx->rodata_api_info_section && nso_ctx->rodata_api_info_section_size) break;
-        nso_ctx = NULL;
-    }
-
-    /* Check if we found the "sdk" NSO. */
-    if (!nso_ctx) goto end;
+    nso_ctx = programInfoGetNsoContextByFilename(program_info_ctx, "sdk");
+    if (!nso_ctx || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) goto end;
 
     /* Look for the "nnSdk" entry in .api_info section. */
     for(u64 i = 0; i < nso_ctx->rodata_api_info_section_size; i++)
@@ -377,7 +393,7 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
         NsoContext *nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (!nso_ctx->nso_filename || !*(nso_ctx->nso_filename) || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
+        if (!nso_ctx->nso_filename || !nso_ctx->nso_filename[0] || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
 
         for(u64 j = 0; j < nso_ctx->rodata_api_info_section_size; j++)
         {
@@ -478,22 +494,15 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     }
 
     NsoContext *nso_ctx = NULL;
-    bool success = false, symbols_exist = false, is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    bool success = false, symbols_exist = false, is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags0.is_64bit_instruction == 1);
 
     char *symbol_str = NULL;
     u64 symbol_size = (!is_64bit ? sizeof(Elf32Symbol) : sizeof(Elf64Symbol));
 
     /* Locate "main" NSO. */
-    for(u32 i = 0; i < program_info_ctx->nso_count; i++)
-    {
-        nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (nso_ctx->nso_filename && !strcmp(nso_ctx->nso_filename, "main") && nso_ctx->rodata_dynstr_section && nso_ctx->rodata_dynstr_section_size && \
-            nso_ctx->rodata_dynsym_section && nso_ctx->rodata_dynsym_section_size) break;
-        nso_ctx = NULL;
-    }
-
-    /* Check if we found the "main" NSO. */
-    if (!nso_ctx) goto end;
+    nso_ctx = programInfoGetNsoContextByFilename(program_info_ctx, "main");
+    if (!nso_ctx || !nso_ctx->rodata_dynstr_section || !nso_ctx->rodata_dynstr_section_size || \
+        !nso_ctx->rodata_dynsym_section || !nso_ctx->rodata_dynsym_section_size) goto end;
 
     /* Check if any symbols matching the required filters exist. */
     for(u64 i = 0; i < nso_ctx->rodata_dynsym_section_size; i += symbol_size)

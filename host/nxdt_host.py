@@ -3,7 +3,7 @@
 """
  * nxdt_host.py
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -70,10 +70,10 @@ WINDOW_WIDTH  = 500
 WINDOW_HEIGHT = 470
 
 # Application version.
-APP_VERSION = '0.5'
+APP_VERSION = '0.6'
 
 # Copyright year.
-COPYRIGHT_YEAR = '2020-2024'
+COPYRIGHT_YEAR = '2020-2026'
 
 # USB VID/PID pair.
 USB_DEV_VID = 0x057E
@@ -97,24 +97,26 @@ USB_MAGIC_WORD = b'NXDT'
 
 # Supported USB ABI version.
 USB_ABI_VERSION_MAJOR = 1
-USB_ABI_VERSION_MINOR = 2
+USB_ABI_VERSION_MINOR = 4
 
 # USB command header size.
 USB_CMD_HEADER_SIZE = 0x10
 
 # USB command IDs.
 USB_CMD_START_SESSION           = 0
-USB_CMD_SEND_FILE_PROPERTIES    = 1
-USB_CMD_CANCEL_FILE_TRANSFER    = 2
+USB_CMD_END_SESSION             = 1
+USB_CMD_SEND_FILE_PROPERTIES    = 2
 USB_CMD_SEND_NSP_HEADER         = 3
-USB_CMD_END_SESSION             = 4
+USB_CMD_CANCEL_FILE_TRANSFER    = 4
 USB_CMD_START_EXTRACTED_FS_DUMP = 5
-USB_CMD_END_EXTRACTED_FS_DUMP   = 6
+USB_CMD_START_BULK_NSP_DUMP     = 6
+USB_CMD_END_BULK_OPERATION      = 7
 
 # USB command block sizes.
 USB_CMD_BLOCK_SIZE_START_SESSION           = 0x10
 USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES    = 0x320
 USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP = 0x310
+USB_CMD_BLOCK_SIZE_START_BULK_NSP_DUMP     = 0x10
 
 # Max filename length (file properties).
 USB_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300
@@ -543,7 +545,7 @@ class ProgressBarWindow:
         self.prev_n = cur_n
         self.prev_iter_time = cur_time
 
-        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f}MiB/s')
+        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f} MiB/s')
 
     def end(self) -> None:
         self.n = 0
@@ -686,7 +688,7 @@ def usbGetDeviceEndpoints() -> bool:
             if not g_cliMode:
                 utilsLogException(traceback.format_exc())
 
-            g_logger.error('Fatal error ocurred while enumerating USB devices.')
+            g_logger.error('Fatal error occurred while enumerating USB devices.')
 
             if g_isWindows:
                 g_logger.error('Try reinstalling the libusbK driver using Zadig.')
@@ -795,14 +797,19 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     g_nxdtAbiVersionMinor = (abi_version & 0x0F)
 
     # Print client info.
-    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}), USB {g_usbVersion}.\n')
+    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro} (commit {g_nxdtGitCommit}), USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} over USB {g_usbVersion}.\n')
 
     # Check if we support this ABI version.
     if (g_nxdtAbiVersionMajor != USB_ABI_VERSION_MAJOR) or (g_nxdtAbiVersionMinor != USB_ABI_VERSION_MINOR):
-        g_logger.error('Unsupported ABI version!')
+        g_logger.error('Unsupported ABI version!\nPlease update this script and the nxdumptool binary.')
         return USB_STATUS_UNSUPPORTED_ABI_VERSION
 
     # Return status code.
+    return USB_STATUS_SUCCESS
+
+def usbHandleEndSession(cmd_block: bytes) -> int:
+    assert g_logger is not None
+    g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
     return USB_STATUS_SUCCESS
 
 def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
@@ -1021,23 +1028,6 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
     return USB_STATUS_SUCCESS
 
-def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
-    assert g_logger is not None
-
-    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
-
-    if g_nspTransferMode:
-        if (g_nspSize > USB_TRANSFER_THRESHOLD) and (g_progressBarWindow is not None):
-            g_progressBarWindow.end()
-
-        utilsResetNspInfo(True)
-
-        g_logger.warning('Transfer cancelled.')
-        return USB_STATUS_SUCCESS
-    else:
-        g_logger.error('Unexpected transfer cancellation.')
-        return USB_STATUS_MALFORMED_CMD
-
 def usbHandleSendNspHeader(cmd_block: bytes) -> int:
     global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
 
@@ -1072,10 +1062,22 @@ def usbHandleSendNspHeader(cmd_block: bytes) -> int:
 
     return USB_STATUS_SUCCESS
 
-def usbHandleEndSession(cmd_block: bytes) -> int:
+def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
     assert g_logger is not None
-    g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
-    return USB_STATUS_SUCCESS
+
+    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
+
+    if g_nspTransferMode:
+        if (g_nspSize > USB_TRANSFER_THRESHOLD) and (g_progressBarWindow is not None):
+            g_progressBarWindow.end()
+
+        utilsResetNspInfo(True)
+
+        g_logger.warning('Transfer cancelled.')
+        return USB_STATUS_SUCCESS
+    else:
+        g_logger.error('Unexpected transfer cancellation.')
+        return USB_STATUS_MALFORMED_CMD
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
@@ -1095,10 +1097,27 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     # Return status code.
     return USB_STATUS_SUCCESS
 
-def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
+def usbHandleStartBulkNspDump(cmd_block: bytes) -> int:
     assert g_logger is not None
-    g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
-    g_logger.info(f'Finished extracted FS dump.')
+
+    g_logger.debug(f'Received StartBulkNspDump ({USB_CMD_START_BULK_NSP_DUMP:02X}) command.')
+
+    if g_nspTransferMode:
+        g_logger.error('StartBulkNspDump received mid NSP transfer.')
+        return USB_STATUS_MALFORMED_CMD
+
+    # Parse command block.
+    nsp_count = struct.unpack_from(f'<I', cmd_block, 0)[0]
+
+    g_logger.info(f'Starting bulk NSP dump ({nsp_count} NSP[s]).')
+
+    # Return status code.
+    return USB_STATUS_SUCCESS
+
+def usbHandleEndBulkOperation(cmd_block: bytes) -> int:
+    assert g_logger is not None
+    g_logger.debug(f'Received EndBulkOperation ({USB_CMD_END_BULK_OPERATION:02X}) command.')
+    g_logger.info(f'Finished bulk operation.')
     return USB_STATUS_SUCCESS
 
 def usbCommandHandler() -> None:
@@ -1106,12 +1125,13 @@ def usbCommandHandler() -> None:
 
     cmd_dict = {
         USB_CMD_START_SESSION:           usbHandleStartSession,
-        USB_CMD_SEND_FILE_PROPERTIES:    usbHandleSendFileProperties,
-        USB_CMD_CANCEL_FILE_TRANSFER:    usbHandleCancelFileTransfer,
-        USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
         USB_CMD_END_SESSION:             usbHandleEndSession,
+        USB_CMD_SEND_FILE_PROPERTIES:    usbHandleSendFileProperties,
+        USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
+        USB_CMD_CANCEL_FILE_TRANSFER:    usbHandleCancelFileTransfer,
         USB_CMD_START_EXTRACTED_FS_DUMP: usbHandleStartExtractedFsDump,
-        USB_CMD_END_EXTRACTED_FS_DUMP:   usbHandleEndExtractedFsDump
+        USB_CMD_START_BULK_NSP_DUMP:     usbHandleStartBulkNspDump,
+        USB_CMD_END_BULK_OPERATION:      usbHandleEndBulkOperation
     }
 
     # Get device endpoints.
@@ -1178,7 +1198,8 @@ def usbCommandHandler() -> None:
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
            (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER and cmd_block_size) or \
            (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size) or \
-           (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP):
+           (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP) or \
+           (cmd_id == USB_CMD_START_BULK_NSP_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_BULK_NSP_DUMP):
             g_logger.error(f'Invalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')
             usbSendStatus(USB_STATUS_MALFORMED_CMD)
             continue

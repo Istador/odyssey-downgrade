@@ -1,7 +1,7 @@
 /*
  * npdm.h
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -41,7 +41,7 @@ extern "C" {
 
 /// 'NpdmSignatureKeyGeneration_Current' will always point to the last known key generation value.
 /// TODO: update on signature keygen changes.
-typedef enum : u8 {
+typedef enum : u32 {
     NpdmSignatureKeyGeneration_Since100NUP = 0,                                         ///< 1.0.0 - 8.1.1.
     NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0+.
     NpdmSignatureKeyGeneration_Current     = NpdmSignatureKeyGeneration_Since900NUP,
@@ -50,10 +50,15 @@ typedef enum : u8 {
 
 typedef enum : u8 {
     NpdmProcessAddressSpace_AddressSpace32Bit           = 0,
-    NpdmProcessAddressSpace_AddressSpace64BitOld        = 1,
+    NpdmProcessAddressSpace_AddressSpace64Bit36         = 1,    ///< 23.0.0+.
     NpdmProcessAddressSpace_AddressSpace32BitNoReserved = 2,
-    NpdmProcessAddressSpace_AddressSpace64Bit           = 3,
-    NpdmProcessAddressSpace_Count                       = 4     ///< Total values supported by this enum.
+    NpdmProcessAddressSpace_AddressSpace64Bit39         = 3,    ///< 23.0.0+.
+    NpdmProcessAddressSpace_AddressSpace64Bit42         = 4,    ///< 23.0.0+.
+    NpdmProcessAddressSpace_Count                       = 5,    ///< Total values supported by this enum.
+
+    // Old.
+    NpdmProcessAddressSpace_AddressSpace64BitOld        = NpdmProcessAddressSpace_AddressSpace64Bit36,
+    NpdmProcessAddressSpace_AddressSpace64Bit           = NpdmProcessAddressSpace_AddressSpace64Bit39
 } NpdmProcessAddressSpace;
 
 typedef struct {
@@ -63,27 +68,33 @@ typedef struct {
     u8 disable_device_address_space_merge         : 1;
     u8 enable_address_sanitizer                   : 1;
     u8 prevent_code_reads                         : 1;
-} NpdmMetaFlags;
+} NpdmMetaFlags0;
 
-NXDT_ASSERT(NpdmMetaFlags, 0x1);
+NXDT_ASSERT(NpdmMetaFlags0, 0x1);
+
+typedef struct {
+    u8 enable_shadow_stack : 1;
+} NpdmMetaFlags1;
+
+NXDT_ASSERT(NpdmMetaFlags1, 0x1);
 
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
     u32 magic;                                                  ///< "META".
     NpdmSignatureKeyGeneration acid_signature_key_generation;
-    u8 reserved_1[0x7];
-    NpdmMetaFlags flags;
-    u8 reserved_2;
+    u8 reserved_1[0x4];
+    NpdmMetaFlags0 flags0;
+    NpdmMetaFlags1 flags1;                                      ///< 23.0.0+.
     u8 main_thread_priority;                                    ///< Must not exceed NPDM_MAIN_THREAD_MAX_PRIORITY.
     u8 main_thread_core_number;                                 ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
-    u8 reserved_3[0x4];
+    u8 reserved_2[0x4];
     u32 system_resource_size;                                   ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
     Version version;
     u32 main_thread_stack_size;                                 ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
     char name[0x10];                                            ///< Usually set to "Application".
     char product_code[0x10];                                    ///< Usually zeroed out.
-    u8 reserved_4[0x30];
+    u8 reserved_3[0x30];
     u32 aci_offset;                                             ///< Offset value relative to the start of this header.
     u32 aci_size;
     u32 acid_offset;                                            ///< Offset value relative to the start of this header.
@@ -123,7 +134,7 @@ typedef struct {
     u32 magic;                      ///< "ACID".
     u32 size;                       ///< Must be equal to ACID section size from the META header minus 0x100 (ACID signature size).
     u8 version;                     ///< 9.0.0+.
-    u8 unknown;                     ///< 14.0.0+.
+    u8 version2;                    ///< 14.0.0+.
     u8 reserved_1[0x2];
     NpdmAcidFlags flags;
     u64 program_id_min;
@@ -204,6 +215,10 @@ typedef enum : u64 {
     NpdmFsAccessControlFlags_StorageControl                 = BITL(42),
     NpdmFsAccessControlFlags_GameCardReport                 = BITL(43),
     NpdmFsAccessControlFlags_MarkBeforeEraseBis             = BITL(44),
+    NpdmFsAccessControlFlags_HtmlViewer                     = BITL(45),
+    NpdmFsAccessControlFlags_ApplicationSaveDataBackUp      = BITL(46),
+    NpdmFsAccessControlFlags_StreamPlaySaveData             = BITL(47),
+    NpdmFsAccessControlFlags_TemporaryDirectory             = BITL(48),
     NpdmFsAccessControlFlags_Debug                          = BITL(62),
     NpdmFsAccessControlFlags_FullPermission                 = BITL(63),
     NpdmFsAccessControlFlags_Count                          = 64        ///< Total values supported by this enum.
@@ -429,7 +444,7 @@ typedef enum : u32 {
     NpdmSystemCallId_UnmapTransferMemory            = BIT(10),  ///< SVC 0x52.
     NpdmSystemCallId_CreateInterruptEvent           = BIT(11),  ///< SVC 0x53.
     NpdmSystemCallId_QueryPhysicalAddress           = BIT(12),  ///< SVC 0x54.
-    NpdmSystemCallId_QueryIoMapping                 = BIT(13),  ///< SVC 0x55.
+    NpdmSystemCallId_QueryMemoryMapping             = BIT(13),  ///< SVC 0x55. Old: NpdmSystemCallId_QueryIoMapping (1.0.0 - 9.2.0).
     NpdmSystemCallId_CreateDeviceAddressSpace       = BIT(14),  ///< SVC 0x56.
     NpdmSystemCallId_AttachDeviceAddressSpace       = BIT(15),  ///< SVC 0x57.
     NpdmSystemCallId_DetachDeviceAddressSpace       = BIT(16),  ///< SVC 0x58.
@@ -494,8 +509,8 @@ typedef enum : u32 {
     NpdmSystemCallId_Reserved22                     = BIT(23),  ///< SVC 0x8F.
 
     ///< System calls for index 6.
-    NpdmSystemCallId_MapInsecureMemory              = BIT(0),   ///< SVC 0x90 (15.0.0+).
-    NpdmSystemCallId_UnmapInsecureMemory            = BIT(1),   ///< SVC 0x91 (15.0.0+).
+    NpdmSystemCallId_MapInsecurePhysicalMemory      = BIT(0),   ///< SVC 0x90 (15.0.0+).
+    NpdmSystemCallId_UnmapInsecurePhysicalMemory    = BIT(1),   ///< SVC 0x91 (15.0.0+).
     NpdmSystemCallId_Reserved23                     = BIT(2),   ///< SVC 0x92.
     NpdmSystemCallId_Reserved24                     = BIT(3),   ///< SVC 0x93.
     NpdmSystemCallId_Reserved25                     = BIT(4),   ///< SVC 0x94.
@@ -706,7 +721,7 @@ NX_INLINE void npdmFreeContext(NpdmContext *npdm_ctx)
     memset(npdm_ctx, 0, sizeof(NpdmContext));
 }
 
-NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
+NX_INLINE bool npdmIsValidContext(const NpdmContext *npdm_ctx)
 {
     return (npdm_ctx && npdm_ctx->raw_data && npdm_ctx->raw_data_size && npdm_ctx->meta_header && npdm_ctx->acid_header && npdm_ctx->acid_fac_descriptor && \
             ((npdm_ctx->acid_header->srv_access_control_size && npdm_ctx->acid_sac_descriptor) || (!npdm_ctx->acid_header->srv_access_control_size && !npdm_ctx->acid_sac_descriptor)) && \

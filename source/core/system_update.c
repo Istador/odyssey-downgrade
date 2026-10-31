@@ -1,7 +1,7 @@
 /*
  * system_update.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -442,7 +442,7 @@ static bool systemUpdateGetSystemVersionFileData(SystemUpdateDumpContext *ctx)
     NcaContext *nca_ctx = NULL;
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    const RomFileSystemFileEntry *romfs_file_entry = NULL;
 
     bool success = false;
 

@@ -1,6 +1,6 @@
 # nxdumptool USB Application Binary Interface (ABI) Technical Specification
 
-This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (November 11th, 2023), the current ABI version is `1.2`.
+This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (March 23rd, 2026), the current ABI version is `1.4`.
 
 In order to avoid unnecessary clutter, this document assumes the reader is already familiar with homebrew launching on the Nintendo Switch, as well as USB concepts such as device/configuration/interface/endpoint descriptors and bulk mode transfers. Shall this not be the case, a small list of helpful resources is available at the end of this document.
 
@@ -17,12 +17,14 @@ Unless stated otherwise, the reader must assume all integer fields in the docume
         * [Command IDs](#command-ids).
     * [Command blocks](#command-blocks).
         * [StartSession](#startsession).
+        * [EndSession](#endsession).
         * [SendFileProperties](#sendfileproperties).
-        * [CancelFileTransfer](#cancelfiletransfer).
         * [SendNspHeader](#sendnspheader).
+        * [CancelFileTransfer](#cancelfiletransfer).
         * [EndSession](#endsession).
         * [StartExtractedFsDump](#startextractedfsdump).
-        * [EndExtractedFsDump](#endextractedfsdump).
+        * [StartBulkNspDump](#startbulknspdump).
+        * [EndBulkOperation](#endbulkoperation).
     * [Status response](#status-response).
         * [Status codes](#status-codes).
     * [NSP transfer mode](#nsp-transfer-mode).
@@ -70,6 +72,20 @@ A USB driver is needed to actually communicate to the target console running nxd
 
 A package manager can be used to install [libusb](https://libusb.info), which in turn can be used by programs to enumerate and interact with the target console. Under some operating systems, this step may not even be needed.
 
+Under certain Linux distros, it may be needed to manually add a `udev` rule before being able to communicate with the console. To achieve this, simply create a new _.rules_ file at `/etc/udev/rules.d/` with the following content:
+
+```
+# Nintendo Switch - nxdumptool USB Dumping
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="3000", MODE="0660", TAG+="uaccess"
+```
+
+Afterwards, issue these commands to load the new rule:
+
+```
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 ### Windows
 
 A tool such as [Zadig](https://zadig.akeo.ie) must be used to manually install a USB driver for the target console.
@@ -106,12 +122,13 @@ Certain commands yield no command block at all, leading to a command block size 
 | Value | Name                                            | Description                                                                                                                           |
 |-------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 |   0   | [`StartSession`](#startsession)                 | Starts a USB session between the target console and the USB host device.                                                              |
-|   1   | [`SendFileProperties`](#sendfileproperties)     | Sends file metadata and starts a data transfer process.                                                                               |
-|   2   | [`CancelFileTransfer`](#cancelfiletransfer)     | Cancels an ongoing data transfer process started by a previously issued [`SendFileProperties`](#sendfileproperties) command.          |
+|   1   | [`EndSession`](#endsession)                     | Ends a previously stablished USB session between the target console and the USB host device.                                          |
+|   2   | [`SendFileProperties`](#sendfileproperties)     | Sends file metadata and starts a data transfer process.                                                                               |
 |   3   | [`SendNspHeader`](#sendnspheader)               | Sends the `PFS0` header from a Nintendo Submission Package (NSP). Only issued under [NSP transfer mode](#nsp-transfer-mode).          |
-|   4   | [`EndSession`](#endsession)                     | Ends a previously stablished USB session between the target console and the USB host device.                                          |
+|   4   | [`CancelFileTransfer`](#cancelfiletransfer)     | Cancels an ongoing data transfer process started by a previously issued [`SendFileProperties`](#sendfileproperties) command.          |
 |   5   | [`StartExtractedFsDump`](#startextractedfsdump) | Informs the host device that an extracted filesystem dump (e.g. HFS, PFS, RomFS) is about to begin.                                   |
-|   6   | [`EndExtractedFsDump`](#endextractedfsdump)     | Informs the host device that a previously started filesystem dump (via [`StartExtractedFsDump`](#startextractedfsdump)) has finished. |
+|   6   | [`StartBulkNspDump`](#startbulknspdump)         | Informs the host device that a bulk NSP dump is about to begin.                                                                       |
+|   7   | [`EndBulkOperation`](#endbulkoperation)         | Informs the host device that a previously started bulk operation (like an extracted filesystem dump or a bulk NSP dump) has finished. |
 
 ### Command blocks
 
@@ -131,6 +148,12 @@ Size: 0x10 bytes.
 |  0x0C  | 0x04 | `uint8_t[4]` | Reserved.                                                           |
 
 This is the first USB command issued by nxdumptool upon connection to a USB host device. If it succeeds, further USB commands may be sent.
+
+#### EndSession
+
+Yields no command block. Expects a status response, just like the rest of the commands.
+
+This command is only issued while exiting nxdumptool, as long as the target console is connected to a host device and a USB session has been successfully established.
 
 #### SendFileProperties
 
@@ -158,19 +181,6 @@ If the last chunk size from the data transfer stage is aligned to the endpoint m
 
 Finally, it should be noted that it's possible for the `filesize` field to be zero, in which case the host device shall only create the file and send a single status response right away.
 
-#### CancelFileTransfer
-
-Yields no command block. Expects a status response, just like the rest of the commands.
-
-This command can only be issued under two different scenarios:
-
-* During the file data transfer stage from a [SendFileProperties](#sendfileproperties) command.
-* In-between two different [SendFileProperties](#sendfileproperties) commands while under [NSP transfer mode](#nsp-transfer-mode).
-
-It is used to gracefully cancel an ongoing file transfer while also keeping the USB session alive. It's up to the USB host to decide what to do with the incomplete data.
-
-The easiest way to detect this command during a file transfer is by checking the length of the last received block and then parse it to see if it matches a `CancelFileTransfer` command header.
-
 #### SendNspHeader
 
 Variable length. The command block size from the command header represents the NSP header size, while the command block data represents the `PFS0` header from a NSP.
@@ -179,11 +189,18 @@ If the NSP header size is aligned to the endpoint max packet size, the USB host 
 
 For more information, read the [NSP transfer mode](#nsp-transfer-mode) section of this document.
 
-#### EndSession
+#### CancelFileTransfer
 
 Yields no command block. Expects a status response, just like the rest of the commands.
 
-This command is only issued while exiting nxdumptool, as long as the target console is connected to a host device and a USB session has been successfully established.
+This command can only be issued under two different scenarios:
+
+* During the file data transfer stage from a [`SendFileProperties`](#sendfileproperties) command.
+* In-between two different [`SendFileProperties`](#sendfileproperties) commands while under [NSP transfer mode](#nsp-transfer-mode).
+
+It is used to gracefully cancel an ongoing file transfer while also keeping the USB session alive. It's up to the USB host to decide what to do with the incomplete data.
+
+The easiest way to detect this command during a file transfer is by checking the length of the last received block and then parse it to see if it matches a `CancelFileTransfer` command header.
 
 #### StartExtractedFsDump
 
@@ -195,25 +212,45 @@ Size: 0x310 bytes.
 |  0x008 | 0x301 | `char[769]`   | UTF-8 encoded extracted FS root path (NULL-terminated string). |
 |  0x309 | 0x007 | `uint8_t[7]`  | Reserved.                                                      |
 
-Sent right before dumping a Switch FS in extracted form (e.g. HFS, PFS, RomFS) using multiple [SendFileProperties](#sendfileproperties) commands in succession.
+Sent right before dumping a Switch FS in extracted form (e.g. HFS, PFS, RomFS) using multiple [`SendFileProperties`](#sendfileproperties) commands in succession.
 
 The extracted FS dump size field can be used by the host device to calculate an ETA for the overall FS dump.
 
 The extracted FS root path follows the same conventions as the `path` field from a [`SendFileProperties`](#sendfileproperties) command, which means it also represents a relative path to an actual output directory used by nxdumptool, but with the difference that it actually points to the directory where all the extracted FS entries will be stored. In other words, all file paths from the extracted FS dump will begin with this string.
 
-A new `StartExtractedFsDump` command will never be issued unless an ongoing extracted FS dump is either cancelled (via [`CancelFileTransfer`](#cancelfiletransfer)) or finished (via [`EndExtractedFsDump`](#endextractedfsdump)).
+A new `StartExtractedFsDump` command will never be issued unless an ongoing extracted FS dump is either cancelled (via [`CancelFileTransfer`](#cancelfiletransfer)) or finished (via [`EndBulkOperation`](#endbulkoperation)).
 
-This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) -- it'll never be issued if this mode is active.
+This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) and the [`StartBulkNspDump`](#startbulknspdump) command -- it'll never be issued if either of these modes is active.
 
-#### EndExtractedFsDump
+#### StartBulkNspDump
+
+Size: 0x10 bytes.
+
+| Offset | Size  | Type          | Description                                                    |
+|--------|-------|---------------|----------------------------------------------------------------|
+|  0x000 | 0x004 | `uint32_t`    | Number of NSPs to dump.                                        |
+|  0x004 | 0x00C | `uint8_t[12]` | Reserved.                                                      |
+
+Sent right before starting a bulk NSP dump using multiple [`SendFileProperties`](#sendfileproperties) commands in succession (with populated NSP header fields).
+
+A new `StartBulkNspDump` command will never be issued unless an ongoing bulk NSP dump is either cancelled (via [`CancelFileTransfer`](#cancelfiletransfer)) or finished.
+
+If an error occurs while dumping an entry from the application's queue, it will proceed with the next NSP instead of cancelling the process altogether.
+
+This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) and the [`StartExtractedFsDump`](#startextractedfsdump) command -- it'll never be issued if either of these modes is active.
+
+#### EndBulkOperation
 
 Yields no command block. Expects a status response, just like the rest of the commands.
 
-This command is only issued after all file entries from an extracted FS dump (started via [`StartExtractedFsDump`](#startextractedfsdump)) have been successfully transferred to the host device.
+This command is only issued under one of the following conditions:
 
-If a [`CancelFileTransfer`](#cancelfiletransfer) command is issued before finishing an extracted FS dump, this command shall not be expected.
+* After all file entries from an extracted FS dump (started via [`StartExtractedFsDump`](#startextractedfsdump)) have been successfully transferred to the host device.
+* After a bulk NSP dump process (started via [`StartBulkNspDump`](#startbulknspdump)) has finished, regardless of any errors taking place or not.
 
-This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) -- it'll never be issued if this mode is active.
+If a [`CancelFileTransfer`](#cancelfiletransfer) command is issued before finishing a bulk operation, this command shall not be expected.
+
+This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) -- it'll never be issued if it is active.
 
 ### Status response
 
@@ -229,7 +266,7 @@ Size: 0x10 bytes.
 Status responses are expected by nxdumptool at certain points throughout the command handling steps:
 
 * Right after receiving a command header and/or command block (depending on the command ID).
-* Right after receiving the last file data chunk from a [SendFileProperties](#sendfileproperties) command.
+* Right after receiving the last file data chunk from a [`SendFileProperties`](#sendfileproperties) command.
 
 The endpoint max packet size must be sent back to the target console using status responses because `usb:ds` API's `GetUsbDeviceSpeed` cmd is only available under Horizon OS 8.0.0+. We want to provide USB communication support under lower versions, even if it means we have to resort to measures like this one.
 
@@ -249,13 +286,13 @@ The endpoint max packet size must be sent back to the target console using statu
 
 ### NSP transfer mode
 
-If the NSP header size field from a [SendFileProperties](#sendfileproperties) command block is greater than zero, the USB host should enter NSP transfer mode. The file size field from this block represents, then, the full NSP size (including the NSP header).
+If the NSP header size field from a [`SendFileProperties`](#sendfileproperties) command block is greater than zero, the USB host should enter NSP transfer mode. The file size field from this block represents, then, the full NSP size (including the NSP header).
 
-In this mode, the USB host should immediately create the output file, write `NSP header size` bytes of padding to it, reply with a status response as usual and expect further [SendFileProperties](#sendfileproperties) commands. No file data is transferred for this very first [SendFileProperties](#sendfileproperties) command block.
+In this mode, the USB host should immediately create the output file, write `NSP header size` bytes of padding to it, reply with a status response as usual and expect further [`SendFileProperties`](#sendfileproperties) commands. No file data is transferred for this very first [`SendFileProperties`](#sendfileproperties) command block.
 
-Each further [SendFileProperties](#sendfileproperties) command block will hold the filename and size for a specific NSP file entry, and the NSP header size field will always be set to zero. The file data received for each one of these file entries must be written to the output file created during the first [SendFileProperties](#sendfileproperties) command. The sum of all file entry sizes should be equal to the full NSP size minus the NSP header size received during the first [SendFileProperties](#sendfileproperties) command.
+Each further [`SendFileProperties`](#sendfileproperties) command block will hold the filename and size for a specific NSP file entry, and the NSP header size field will always be set to zero. The file data received for each one of these file entries must be written to the output file created during the first [`SendFileProperties`](#sendfileproperties) command. The sum of all file entry sizes should be equal to the full NSP size minus the NSP header size received during the first [`SendFileProperties`](#sendfileproperties) command.
 
-Finally, the USB host will receive a [SendNspHeader](#sendnspheader) command with the NSP header data, which should be written at the start of the output file. The command block size in the command header should match the NSP header size received in the first [SendFileProperties](#sendfileproperties) command.
+Finally, the USB host will receive a [`SendNspHeader`](#sendnspheader) command with the NSP header data, which should be written at the start of the output file. The command block size in the command header should match the NSP header size received in the first [`SendFileProperties`](#sendfileproperties) command.
 
 #### Why is there such thing as a 'NSP transfer mode'?
 
@@ -277,3 +314,5 @@ Most USB backend implementations require the host application to provide a bigge
 
 * [USB in a NutShell](https://www.beyondlogic.org/usbnutshell/usb1.shtml).
 * [USB Made Simple](https://www.usbmadesimple.co.uk).
+* [NX Dump Client](https://github.com/v1993/nxdumpclient), a native nxdumptool USB host implementation for Unix systems written in Vala. Made by [v1993](https://github.com/v1993).
+* [Web-NXDT](https://github.com/MAProsper/web-nxdt), a web-based nxdumptool USB host implementation written in Javascript. Made by [MAProsper](https://github.com/MAProsper).

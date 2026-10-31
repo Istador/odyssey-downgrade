@@ -1,7 +1,7 @@
 /*
  * nxdt_bfsar.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -45,7 +45,7 @@ bool bfsarInitialize(void)
     NcaContext *nca_ctx = NULL;
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    const RomFileSystemFileEntry *romfs_file_entry = NULL;
 
     FILE *bfsar_file = NULL;
     u8 *bfsar_data = NULL;

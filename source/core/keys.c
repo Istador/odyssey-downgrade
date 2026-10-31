@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2018-2020, SciresM.
  * Copyright (c) 2019, shchmue.
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -134,7 +134,8 @@ static const u32 g_hosMasterKeyIndexTable[NcaKeyGeneration_Current] = {
     [NcaKeyGeneration_Since1800NUP - 1] = MAKEHOSVERSION(18, 0, 0),
     [NcaKeyGeneration_Since1900NUP - 1] = MAKEHOSVERSION(19, 0, 0),
     [NcaKeyGeneration_Since2000NUP - 1] = MAKEHOSVERSION(20, 0, 0),
-    [NcaKeyGeneration_Since2100NUP - 1] = MAKEHOSVERSION(21, 0, 0)
+    [NcaKeyGeneration_Since2100NUP - 1] = MAKEHOSVERSION(21, 0, 0),
+    [NcaKeyGeneration_Since2200NUP - 1] = MAKEHOSVERSION(22, 0, 0)
 };
 
 static u8 g_atmosphereKeyGeneration = 0, g_currentMasterKeyIndex = 0, g_hosKeyGeneration = 0;

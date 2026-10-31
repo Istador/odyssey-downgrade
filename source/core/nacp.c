@@ -1,7 +1,7 @@
 /*
  * nacp.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -24,6 +24,8 @@
 #include <core/title.h>
 
 /* Helper macros. */
+
+#define NACP_TITLE_COMPRESSED_BLOB_ZLIB_WBITS                                                   -15
 
 #define NACP_ADD_FMT_STR_T1(fmt, ...)                                                           utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, fmt, ##__VA_ARGS__)
 #define NACP_ADD_FMT_STR_T2(fmt, ...)                                                           utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, fmt, ##__VA_ARGS__)
@@ -64,7 +66,9 @@ static const char *g_nacpLanguageStrings[NacpLanguage_Count] = {
     "Korean",
     "TraditionalChinese",
     "SimplifiedChinese",
-    "BrazilianPortuguese"
+    "BrazilianPortuguese",
+    "Polish",
+    "Thai"
 };
 
 static const char *g_nacpStartupUserAccountStrings[NacpStartupUserAccount_Count] = {
@@ -235,6 +239,8 @@ static const char *g_nacpAlbumFileExportStrings[NacpAlbumFileExport_Count] = {
 
 /* Function prototypes. */
 
+static bool nacpDecompressTitleBlock(NacpContext *nacp_ctx);
+
 NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx);
 
 static bool nacpAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value);
@@ -256,7 +262,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 
     const char *language_str = NULL;
     char icon_path[0x80] = {0};
-    RomFileSystemFileEntry *icon_entry = NULL;
+    const RomFileSystemFileEntry *icon_entry = NULL;
     NacpIconContext *tmp_icon_ctx = NULL;
 
     bool success = false;
@@ -278,7 +284,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         goto end;
     }
 
-    LOG_MSG_INFO("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
+    //LOG_MSG_INFO("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
 
     /* Verify NACP size. */
     if (out->romfs_file_entry->size != sizeof(NsApplicationControlProperty))
@@ -315,7 +321,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Check if the current language is supported. */
         if (!nacpCheckBitflagField(&(out->data->supported_language), sizeof(out->data->supported_language) * 8, (u8)i))
         {
-            LOG_MSG_DEBUG("\"%s\" language not supported (flag 0x%08X, index %u).", language_str, out->data->supported_language, i);
+            //LOG_MSG_DEBUG("\"%s\" language not supported (flag 0x%08X, index %u).", language_str, out->data->supported_language, i);
             continue;
         }
 
@@ -325,7 +331,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Retrieve RomFS file entry for this icon. */
         if (!(icon_entry = romfsGetFileEntryByPath(&(out->romfs_ctx), icon_path)))
         {
-            LOG_MSG_DEBUG("\"%s\" file entry not found (flag 0x%08X, index %u).", icon_path, out->data->supported_language, i);
+            //LOG_MSG_DEBUG("\"%s\" file entry not found (flag 0x%08X, index %u).", icon_path, out->data->supported_language, i);
             continue;
         }
 
@@ -369,6 +375,13 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 
         /* Update icon count. */
         out->icon_count++;
+    }
+
+    // Decompress title block.
+    if (!nacpDecompressTitleBlock(out))
+    {
+        LOG_MSG_ERROR("Failed to decompress NACP title block!");
+        goto end;
     }
 
     /* Update NCA context pointer in output context. */
@@ -499,7 +512,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* Title. */
     for(i = NacpLanguage_AmericanEnglish, count = 0; i < NacpLanguage_Count; i++)
     {
-        NacpTitle *title = &(nacp->title[i]);
+        NacpTitle *title = &(nacp_ctx->titles[i]);
         if (!*(title->name) || !*(title->publisher)) continue;
 
         if (!NACP_ADD_FMT_STR_T1("  <Title>\n" \
@@ -1063,6 +1076,77 @@ const char *nacpGetContentsAvailabilityTransitionPolicyString(NacpContentsAvaila
 const char *nacpGetAlbumFileExportString(NacpAlbumFileExport album_file_export)
 {
     return (album_file_export < NacpAlbumFileExport_Count ? g_nacpAlbumFileExportStrings[album_file_export] : g_unknownString);
+}
+
+static bool nacpDecompressTitleBlock(NacpContext *nacp_ctx)
+{
+    if (!nacp_ctx)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    const NacpTitleFormat1 *compressed_title = &(nacp_ctx->data->title_block.format1);
+    const bool is_compressed = (nacp_ctx->data->titles_data_format == NacpTitlesDataFormat_Format1);
+    const size_t title_block_size = (sizeof(NacpTitle) * (u32)NacpLanguage_Format1EntryCount);
+
+    z_stream zstrm = {0};
+    int ret = Z_OK;
+
+    bool success = false;
+
+    /* Allocate buffer for our decompressed title entries. */
+    if (!(nacp_ctx->titles = calloc(1, title_block_size)))
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for decompressed title block!");
+        goto end;
+    }
+
+    /* Short-circuit: copy the uncompressed title entries to our allocated buffer if we're not dealing with any compression. */
+    if (!is_compressed)
+    {
+        memcpy(nacp_ctx->titles, nacp_ctx->data->title_block.format0, sizeof(nacp_ctx->data->title_block.format0));
+        success = true;
+        goto end;
+    }
+
+    LOG_DATA_DEBUG(compressed_title, title_block_size, "Decompressing title block for %016lX (size 0x%lX):", nacp_ctx->data->save_data_owner_id, title_block_size);
+
+    /* Setup zlib stream settings. */
+    zstrm.next_in = (z_const Bytef*)compressed_title->data;
+    zstrm.avail_in = (uInt)compressed_title->data_size;
+    zstrm.next_out = (Bytef*)nacp_ctx->titles;
+    zstrm.avail_out = (uInt)title_block_size;
+
+    /* Decompress zlib stream. */
+    ret = inflateInit2(&zstrm, NACP_TITLE_COMPRESSED_BLOB_ZLIB_WBITS);
+    if (ret != Z_OK)
+    {
+        LOG_MSG_ERROR("inflateInit2() failed! (%d) (%s).", ret, zstrm.msg);
+        goto end;
+    }
+
+    ret = inflate(&zstrm, Z_FINISH);
+    if (ret != Z_STREAM_END)
+    {
+        LOG_MSG_ERROR("inflate() failed! (%d) (%s).", ret, zstrm.msg);
+        goto end;
+    }
+
+    ret = inflateEnd(&zstrm);
+    if (ret != Z_OK) LOG_MSG_ERROR("inflateEnd() failed! (%d) (%s).", ret, zstrm.msg);
+
+    /* Update flag. */
+    success = true;
+
+end:
+    if (!success && nacp_ctx->titles)
+    {
+        free(nacp_ctx->titles);
+        nacp_ctx->titles = NULL;
+    }
+
+    return success;
 }
 
 NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx)
